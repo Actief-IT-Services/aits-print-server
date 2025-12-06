@@ -1,0 +1,347 @@
+#!/usr/bin/env python3
+"""
+AITS Print Server - Main Server Application
+"""
+
+import os
+import sys
+import logging
+from pathlib import Path
+
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import yaml
+
+from printer_manager import PrinterManager
+from job_queue import JobQueue
+from auth import require_api_key, init_auth
+
+# Initialize Flask app
+app = Flask(__name__)
+CORS(app)
+
+# Load configuration
+config_path = Path(__file__).parent / 'config.yaml'
+if not config_path.exists():
+    print("Error: config.yaml not found. Copy config.example.yaml to config.yaml")
+    sys.exit(1)
+
+with open(config_path, 'r') as f:
+    config = yaml.safe_load(f)
+
+# Setup logging
+log_dir = Path(__file__).parent / 'logs'
+log_dir.mkdir(exist_ok=True)
+
+logging.basicConfig(
+    level=getattr(logging, config['logging']['level']),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_dir / Path(config['logging']['file']).name),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
+# Initialize components
+init_auth(config['security']['api_keys'])
+printer_manager = PrinterManager(config['printer'])
+job_queue = JobQueue(config['printer'])
+
+
+@app.route('/', methods=['GET'])
+def index():
+    """Root endpoint - API information"""
+    return jsonify({
+        'name': 'AITS Print Server',
+        'version': '1.0.0',
+        'status': 'running',
+        'platform': sys.platform,
+        'endpoints': {
+            'health': '/api/v1/health',
+            'printers': '/api/v1/printers',
+            'print': '/api/v1/print (POST)',
+            'jobs': '/api/v1/jobs',
+            'stats': '/api/v1/stats'
+        },
+        'authentication': 'API Key required (X-API-Key header)',
+        'documentation': 'See README.md for full API documentation'
+    })
+
+
+@app.route('/api/health', methods=['GET'])
+@app.route('/api/v1/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'version': '1.0.0',
+        'platform': sys.platform
+    })
+
+
+@app.route('/api/printers', methods=['GET'])
+@app.route('/api/printers', methods=['GET'])
+@app.route('/api/v1/printers', methods=['GET'])
+@require_api_key
+def list_printers():
+    """List all available printers"""
+    try:
+        printers = printer_manager.get_printers()
+        return jsonify({
+            'success': True,
+            'printers': printers
+        })
+    except Exception as e:
+        logger.error(f"Error listing printers: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/printers/<printer_name>', methods=['GET'])
+@app.route('/api/v1/printers/<printer_name>', methods=['GET'])
+@require_api_key
+def get_printer(printer_name):
+    """Get details about a specific printer"""
+    try:
+        printer_info = printer_manager.get_printer_info(printer_name)
+        if printer_info:
+            return jsonify({
+                'success': True,
+                'printer': printer_info
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Printer not found'
+            }), 404
+    except Exception as e:
+        logger.error(f"Error getting printer info: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/printers/<printer_name>/options', methods=['GET'])
+@app.route('/api/v1/printers/<printer_name>/options', methods=['GET'])
+@require_api_key
+def get_printer_options(printer_name):
+    """Get default options/capabilities for a specific printer"""
+    try:
+        options = printer_manager.get_printer_options(printer_name)
+        return jsonify({
+            'success': True,
+            'printer_name': printer_name,
+            'options': options
+        })
+    except Exception as e:
+        logger.error(f"Error getting printer options: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/print', methods=['POST'])
+@app.route('/api/v1/print', methods=['POST'])
+@require_api_key
+def submit_print_job():
+    """Submit a new print job"""
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['printer_name', 'document', 'document_name']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }), 400
+        
+        # Submit job
+        job_id = job_queue.submit_job(
+            printer_name=data['printer_name'],
+            document=data['document'],
+            document_name=data['document_name'],
+            copies=data.get('copies', 1),
+            options=data.get('options', {})
+        )
+        
+        logger.info(f"Print job {job_id} submitted for printer {data['printer_name']}")
+        
+        return jsonify({
+            'success': True,
+            'job_id': job_id,
+            'message': 'Print job submitted successfully'
+        }), 201
+        
+    except Exception as e:
+        logger.error(f"Error submitting print job: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/jobs', methods=['GET'])
+@app.route('/api/v1/jobs', methods=['GET'])
+@require_api_key
+def list_jobs():
+    """List print jobs"""
+    try:
+        status = request.args.get('status')
+        limit = int(request.args.get('limit', 50))
+        
+        jobs = job_queue.get_jobs(status=status, limit=limit)
+        
+        return jsonify({
+            'success': True,
+            'jobs': jobs,
+            'count': len(jobs)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error listing jobs: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/jobs/<job_id>', methods=['GET'])
+@app.route('/api/v1/jobs/<job_id>', methods=['GET'])
+@require_api_key
+def get_job(job_id):
+    """Get details about a specific job"""
+    try:
+        job = job_queue.get_job(job_id)
+        
+        if job:
+            return jsonify({
+                'success': True,
+                'job': job
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Job not found'
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Error getting job: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/jobs/<job_id>/cancel', methods=['POST'])
+@app.route('/api/v1/jobs/<job_id>/cancel', methods=['POST'])
+@require_api_key
+def cancel_job(job_id):
+    """Cancel a print job"""
+    try:
+        success = job_queue.cancel_job(job_id)
+        
+        if success:
+            logger.info(f"Job {job_id} cancelled")
+            return jsonify({
+                'success': True,
+                'message': 'Job cancelled successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Job not found or cannot be cancelled'
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Error cancelling job: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/stats', methods=['GET'])
+@app.route('/api/v1/stats', methods=['GET'])
+@require_api_key
+def get_statistics():
+    """Get server statistics"""
+    try:
+        stats = {
+            'total_printers': len(printer_manager.get_printers()),
+            'jobs': job_queue.get_statistics(),
+            'uptime': job_queue.get_uptime()
+        }
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting statistics: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({
+        'success': False,
+        'error': 'Endpoint not found'
+    }), 404
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"Internal server error: {error}", exc_info=True)
+    return jsonify({
+        'success': False,
+        'error': 'Internal server error'
+    }), 500
+
+
+if __name__ == '__main__':
+    logger.info("Starting AITS Print Server...")
+    logger.info(f"Platform: {sys.platform}")
+    logger.info(f"Server will listen on {config['server']['host']}:{config['server']['port']}")
+    
+    # Start job queue processor
+    job_queue.start()
+    
+    try:
+        if sys.platform == 'win32':
+            # Use waitress on Windows
+            from waitress import serve
+            serve(app, host=config['server']['host'], port=config['server']['port'])
+        else:
+            # Use gunicorn on Linux (or Flask's built-in server in debug mode)
+            if config['server']['debug']:
+                app.run(
+                    host=config['server']['host'],
+                    port=config['server']['port'],
+                    debug=True
+                )
+            else:
+                # For production, use: gunicorn -w 4 -b 0.0.0.0:8888 server:app
+                app.run(
+                    host=config['server']['host'],
+                    port=config['server']['port'],
+                    debug=False
+                )
+    except KeyboardInterrupt:
+        logger.info("Shutting down gracefully...")
+        job_queue.stop()
+    except Exception as e:
+        logger.error(f"Server error: {e}", exc_info=True)
+        job_queue.stop()
+        sys.exit(1)

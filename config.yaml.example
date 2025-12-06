@@ -1,0 +1,48 @@
+# AITS Print Server Configuration
+# Copy this file to config.yaml and adjust settings as needed
+
+server:
+  # Server host and port
+  host: 0.0.0.0      # 0.0.0.0 = listen on all interfaces, 127.0.0.1 = localhost only
+  port: 8888         # Port to listen on
+  debug: false       # Enable debug mode (do not use in production)
+
+printing:
+  # Default printer (null = use system default)
+  default_printer: null
+  
+  # Temporary directory for PDF files
+  temp_dir: /tmp
+  
+  # Auto-cleanup temporary files after printing
+  auto_cleanup: true
+  
+  # Maximum file size in MB
+  max_file_size: 50
+
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: INFO
+  
+  # Log file path (null = console only)
+  file: server.log
+  
+  # Maximum log file size in MB
+  max_size: 10
+  
+  # Number of backup log files to keep
+  backup_count: 5
+
+security:
+  # API authentication (not implemented yet - for future use)
+  # api_key: your-secret-key-here
+  
+  # Allowed IP addresses (empty = allow all)
+  # allowed_ips:
+  #   - 127.0.0.1
+  #   - 192.168.1.0/24
+  
+  # CORS origins (empty = allow all)
+  # cors_origins:
+  #   - http://localhost:8069
+  #   - https://your-odoo-domain.com

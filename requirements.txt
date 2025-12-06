@@ -1,0 +1,19 @@
+flask==3.0.0
+flask-cors==4.0.0
+pyyaml==6.0.1
+requests==2.31.0
+reportlab==4.0.7
+Pillow==10.1.0
+pystray==0.19.5
+
+# Platform-specific dependencies
+# Linux/macOS: CUPS support
+pycups>=2.0.1; sys_platform != 'win32'
+gunicorn==21.2.0; sys_platform != 'win32'
+
+# Windows: Print spooler support
+pywin32>=306; sys_platform == 'win32'
+waitress==2.1.2; sys_platform == 'win32'
+
+# For building executables
+pyinstaller==6.3.0

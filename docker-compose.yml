@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  print-server:
+    build: .
+    container_name: aits-print-server
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./logs:/app/logs
+      - ./jobs.db:/app/jobs.db
+      - /var/run/cups/cups.sock:/var/run/cups/cups.sock
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+    networks:
+      - print-network
+
+networks:
+  print-network:
+    driver: bridge

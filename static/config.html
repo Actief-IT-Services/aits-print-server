@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AITS Print Server - Configuration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .status-bar {
+            display: flex;
+            justify-content: space-around;
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .status-item {
+            text-align: center;
+        }
+        
+        .status-label {
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+        
+        .status-value {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .status-value.online {
+            color: #28a745;
+        }
+        
+        .status-value.offline {
+            color: #dc3545;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #495057;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .form-group small {
+            display: block;
+            margin-top: 5px;
+            color: #6c757d;
+            font-size: 12px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+            flex: 1;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+        }
+        
+        .printer-list {
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .printer-item {
+            padding: 10px;
+            background: white;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #667eea;
+        }
+        
+        .printer-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .printer-name {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .printer-status {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .alert {
+            padding: 12px 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .alert.show {
+            display: block;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e9ecef;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 14px;
+            font-weight: 500;
+            color: #6c757d;
+            position: relative;
+        }
+        
+        .tab.active {
+            color: #667eea;
+        }
+        
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+        }
+        
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🖨️ AITS Print Server</h1>
+            <p>Configuration & Management</p>
+        </div>
+        
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-label">Server Status</div>
+                <div class="status-value" id="serverStatus">Checking...</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Port</div>
+                <div class="status-value" id="serverPort">8888</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Printers</div>
+                <div class="status-value" id="printerCount">0</div>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div id="alert" class="alert"></div>
+            
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('server')">Server Settings</button>
+                <button class="tab" onclick="switchTab('printers')">Printers</button>
+                <button class="tab" onclick="switchTab('about')">About</button>
+            </div>
+            
+            <!-- Server Settings Tab -->
+            <div id="server-tab" class="tab-content active">
+                <div class="section">
+                    <div class="section-title">Server Configuration</div>
+                    
+                    <div class="form-group">
+                        <label for="serverHost">Host</label>
+                        <input type="text" id="serverHost" value="0.0.0.0">
+                        <small>0.0.0.0 = Listen on all interfaces, 127.0.0.1 = Localhost only</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="serverPortInput">Port</label>
+                        <input type="number" id="serverPortInput" value="8888">
+                        <small>Default: 8888</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="debugMode">Debug Mode</label>
+                        <select id="debugMode">
+                            <option value="false">Disabled (Recommended)</option>
+                            <option value="true">Enabled</option>
+                        </select>
+                        <small>Enable for troubleshooting only</small>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <div class="section-title">Printing Configuration</div>
+                    
+                    <div class="form-group">
+                        <label for="defaultPrinter">Default Printer</label>
+                        <select id="defaultPrinter">
+                            <option value="">System Default</option>
+                        </select>
+                        <small>Leave as "System Default" to use OS default printer</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="maxFileSize">Maximum File Size (MB)</label>
+                        <input type="number" id="maxFileSize" value="50" min="1" max="500">
+                        <small>Maximum size for PDF files</small>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <div class="section-title">Logging</div>
+                    
+                    <div class="form-group">
+                        <label for="logLevel">Log Level</label>
+                        <select id="logLevel">
+                            <option value="DEBUG">DEBUG</option>
+                            <option value="INFO" selected>INFO</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="ERROR">ERROR</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="saveConfig()">💾 Save Configuration</button>
+                    <button class="btn btn-secondary" onclick="loadConfig()">🔄 Reload</button>
+                    <button class="btn btn-success" onclick="testConnection()">✓ Test Connection</button>
+                </div>
+            </div>
+            
+            <!-- Printers Tab -->
+            <div id="printers-tab" class="tab-content">
+                <div class="section">
+                    <div class="section-title">Available Printers</div>
+                    <div id="printerList" class="printer-list">
+                        <div class="loading">Loading printers</div>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn btn-primary" onclick="refreshPrinters()">🔄 Refresh Printers</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- About Tab -->
+            <div id="about-tab" class="tab-content">
+                <div class="section">
+                    <div class="section-title">About AITS Print Server</div>
+                    <p style="margin-bottom: 15px;">
+                        <strong>Version:</strong> 1.0.0<br>
+                        <strong>Purpose:</strong> Direct printing from Odoo to local or network printers<br>
+                        <strong>API Documentation:</strong> <a href="/api/docs" target="_blank">View API Docs</a>
+                    </p>
+                    
+                    <div class="section-title">Endpoints</div>
+                    <div class="printer-list">
+                        <div class="printer-item">
+                            <div class="printer-name">GET /health</div>
+                            <div class="printer-status">Server health check</div>
+                        </div>
+                        <div class="printer-item">
+                            <div class="printer-name">GET /printers</div>
+                            <div class="printer-status">List available printers</div>
+                        </div>
+                        <div class="printer-item">
+                            <div class="printer-name">POST /print</div>
+                            <div class="printer-status">Submit print job</div>
+                        </div>
+                        <div class="printer-item">
+                            <div class="printer-name">GET /config</div>
+                            <div class="printer-status">This configuration page</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // API Base URL
+        const API_BASE = window.location.origin;
+        
+        // Switch tabs
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+            
+            // Load data for specific tabs
+            if (tabName === 'printers') {
+                refreshPrinters();
+            }
+        }
+        
+        // Show alert
+        function showAlert(message, type = 'info') {
+            const alert = document.getElementById('alert');
+            alert.className = 'alert alert-' + type + ' show';
+            alert.textContent = message;
+            
+            setTimeout(() => {
+                alert.classList.remove('show');
+            }, 5000);
+        }
+        
+        // Check server status
+        async function checkStatus() {
+            try {
+                const response = await fetch(API_BASE + '/health');
+                const data = await response.json();
+                
+                document.getElementById('serverStatus').textContent = 'Online';
+                document.getElementById('serverStatus').className = 'status-value online';
+            } catch (error) {
+                document.getElementById('serverStatus').textContent = 'Offline';
+                document.getElementById('serverStatus').className = 'status-value offline';
+            }
+        }
+        
+        // Load configuration
+        async function loadConfig() {
+            try {
+                const response = await fetch(API_BASE + '/api/config');
+                if (!response.ok) {
+                    showAlert('Configuration file not found. Using defaults.', 'info');
+                    return;
+                }
+                
+                const config = await response.json();
+                
+                // Populate form fields
+                if (config.server) {
+                    document.getElementById('serverHost').value = config.server.host || '0.0.0.0';
+                    document.getElementById('serverPortInput').value = config.server.port || 8888;
+                    document.getElementById('serverPort').textContent = config.server.port || 8888;
+                    document.getElementById('debugMode').value = String(config.server.debug || false);
+                }
+                
+                if (config.printing) {
+                    document.getElementById('maxFileSize').value = config.printing.max_file_size || 50;
+                }
+                
+                if (config.logging) {
+                    document.getElementById('logLevel').value = config.logging.level || 'INFO';
+                }
+                
+                showAlert('Configuration loaded successfully', 'success');
+            } catch (error) {
+                showAlert('Error loading configuration: ' + error.message, 'error');
+            }
+        }
+        
+        // Save configuration
+        async function saveConfig() {
+            const config = {
+                server: {
+                    host: document.getElementById('serverHost').value,
+                    port: parseInt(document.getElementById('serverPortInput').value),
+                    debug: document.getElementById('debugMode').value === 'true'
+                },
+                printing: {
+                    default_printer: document.getElementById('defaultPrinter').value || null,
+                    max_file_size: parseInt(document.getElementById('maxFileSize').value)
+                },
+                logging: {
+                    level: document.getElementById('logLevel').value
+                }
+            };
+            
+            try {
+                const response = await fetch(API_BASE + '/api/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+                
+                if (response.ok) {
+                    showAlert('Configuration saved! Restart the server for changes to take effect.', 'success');
+                } else {
+                    showAlert('Error saving configuration', 'error');
+                }
+            } catch (error) {
+                showAlert('Error saving configuration: ' + error.message, 'error');
+            }
+        }
+        
+        // Refresh printers
+        async function refreshPrinters() {
+            const printerList = document.getElementById('printerList');
+            printerList.innerHTML = '<div class="loading">Loading printers</div>';
+            
+            try {
+                const response = await fetch(API_BASE + '/printers');
+                const data = await response.json();
+                
+                if (data.printers && data.printers.length > 0) {
+                    // Update count
+                    document.getElementById('printerCount').textContent = data.printers.length;
+                    
+                    // Update printer list
+                    printerList.innerHTML = '';
+                    data.printers.forEach(printer => {
+                        const item = document.createElement('div');
+                        item.className = 'printer-item';
+                        item.innerHTML = `
+                            <div class="printer-name">${printer.name}</div>
+                            <div class="printer-status">${printer.status || 'Available'}</div>
+                        `;
+                        printerList.appendChild(item);
+                    });
+                    
+                    // Update default printer dropdown
+                    const select = document.getElementById('defaultPrinter');
+                    const currentValue = select.value;
+                    select.innerHTML = '<option value="">System Default</option>';
+                    data.printers.forEach(printer => {
+                        const option = document.createElement('option');
+                        option.value = printer.name;
+                        option.textContent = printer.name;
+                        select.appendChild(option);
+                    });
+                    select.value = currentValue;
+                } else {
+                    printerList.innerHTML = '<div class="printer-item"><div class="printer-name">No printers found</div></div>';
+                    document.getElementById('printerCount').textContent = '0';
+                }
+            } catch (error) {
+                printerList.innerHTML = '<div class="printer-item"><div class="printer-name">Error loading printers</div></div>';
+                showAlert('Error loading printers: ' + error.message, 'error');
+            }
+        }
+        
+        // Test connection
+        async function testConnection() {
+            try {
+                const response = await fetch(API_BASE + '/health');
+                const data = await response.json();
+                
+                if (data.status === 'ok') {
+                    showAlert('✓ Connection successful! Server is running.', 'success');
+                } else {
+                    showAlert('✗ Server responded but status is not OK', 'error');
+                }
+            } catch (error) {
+                showAlert('✗ Cannot connect to server: ' + error.message, 'error');
+            }
+        }
+        
+        // Initialize
+        window.addEventListener('load', () => {
+            checkStatus();
+            loadConfig();
+            refreshPrinters();
+            
+            // Refresh status every 30 seconds
+            setInterval(checkStatus, 30000);
+        });
+    </script>
+</body>
+</html>

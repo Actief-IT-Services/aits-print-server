@@ -1,0 +1,25 @@
+[Unit]
+Description=AITS Print Server
+After=network.target cups.service
+
+[Service]
+Type=simple
+User=printserver
+Group=printserver
+WorkingDirectory=/opt/aits_print_server
+Environment="PATH=/opt/aits_print_server/venv/bin"
+ExecStart=/opt/aits_print_server/venv/bin/gunicorn -w 4 -b 0.0.0.0:8888 server:app
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aits-print-server
+
+[Install]
+WantedBy=multi-user.target
