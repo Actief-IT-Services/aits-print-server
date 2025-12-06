@@ -6,11 +6,11 @@ Cross-platform system tray application for the print server
 
 import sys
 import os
-import subprocess
 import threading
 import webbrowser
 import socket
 import tempfile
+import logging
 from pathlib import Path
 
 # Add pystray to requirements
@@ -20,6 +20,15 @@ try:
 except ImportError:
     print("Error: Required packages not installed")
     print("Please run: pip install pystray Pillow")
+    sys.exit(1)
+
+# Import server components
+try:
+    from flask import Flask, request, jsonify, send_from_directory
+    from flask_cors import CORS
+    import yaml
+except ImportError as e:
+    print(f"Error: Required packages not installed: {e}")
     sys.exit(1)
 
 class SingleInstanceChecker:
@@ -86,14 +95,166 @@ def check_port_in_use(port):
 
 class PrintServerTray:
     def __init__(self):
-        self.server_process = None
+        self.server_thread = None
+        self.server_running = False
         self.icon = None
         self.server_port = 8888
+        self.flask_app = None
+        self.waitress_server = None
         
-        # Get the directory where the script is located
-        self.base_dir = Path(__file__).parent
-        # Use full server.py with job queue support instead of simple server
-        self.server_script = self.base_dir / 'server.py'
+        # Get the directory where the script/exe is located
+        if getattr(sys, 'frozen', False):
+            # Running as compiled exe
+            self.base_dir = Path(sys.executable).parent
+        else:
+            # Running as script
+            self.base_dir = Path(__file__).parent
+        
+        # Initialize Flask app
+        self._init_flask_app()
+    
+    def _init_flask_app(self):
+        """Initialize the Flask application"""
+        self.flask_app = Flask(__name__, static_folder=str(self.base_dir / 'static'))
+        CORS(self.flask_app)
+        
+        # Load configuration
+        config_path = self.base_dir / 'config.yaml'
+        if not config_path.exists():
+            # Create default config if not exists
+            self._create_default_config(config_path)
+        
+        with open(config_path, 'r') as f:
+            self.config = yaml.safe_load(f)
+        
+        self.server_port = self.config.get('server', {}).get('port', 8888)
+        
+        # Setup routes
+        self._setup_routes()
+    
+    def _create_default_config(self, config_path):
+        """Create a default configuration file"""
+        default_config = {
+            'server': {
+                'host': '0.0.0.0',
+                'port': 8888,
+                'debug': False
+            },
+            'printer': {
+                'default_printer': None,
+                'timeout': 30
+            },
+            'security': {
+                'api_keys': ['default-key-change-me']
+            },
+            'logging': {
+                'level': 'INFO',
+                'file': 'logs/server.log',
+                'max_bytes': 10485760,
+                'backup_count': 5
+            }
+        }
+        with open(config_path, 'w') as f:
+            yaml.dump(default_config, f, default_flow_style=False)
+    
+    def _setup_routes(self):
+        """Setup Flask routes"""
+        app = self.flask_app
+        
+        @app.route('/')
+        def index():
+            return jsonify({
+                'name': 'AITS Print Server',
+                'version': '19.0.1.0.0',
+                'status': 'running'
+            })
+        
+        @app.route('/config')
+        def config_page():
+            return send_from_directory(self.base_dir / 'static', 'config.html')
+        
+        @app.route('/static/<path:filename>')
+        def static_files(filename):
+            return send_from_directory(self.base_dir / 'static', filename)
+        
+        @app.route('/api/health', methods=['GET'])
+        @app.route('/api/v1/health', methods=['GET'])
+        def health():
+            return jsonify({'status': 'healthy', 'version': '19.0.1.0.0'})
+        
+        @app.route('/api/printers', methods=['GET'])
+        @app.route('/api/v1/printers', methods=['GET'])
+        def get_printers():
+            try:
+                if sys.platform == 'win32':
+                    import win32print
+                    printers = []
+                    for p in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS):
+                        printers.append({
+                            'name': p[2],
+                            'status': 'ready'
+                        })
+                    return jsonify({'printers': printers})
+                else:
+                    import subprocess
+                    result = subprocess.run(['lpstat', '-p'], capture_output=True, text=True)
+                    printers = []
+                    for line in result.stdout.split('\n'):
+                        if line.startswith('printer'):
+                            name = line.split()[1]
+                            printers.append({'name': name, 'status': 'ready'})
+                    return jsonify({'printers': printers})
+            except Exception as e:
+                return jsonify({'printers': [], 'error': str(e)})
+        
+        @app.route('/api/print', methods=['POST'])
+        @app.route('/api/v1/print', methods=['POST'])
+        def print_document():
+            try:
+                data = request.get_json()
+                printer_name = data.get('printer')
+                content = data.get('content')
+                content_type = data.get('content_type', 'raw')
+                
+                if not printer_name or not content:
+                    return jsonify({'success': False, 'error': 'Missing printer or content'}), 400
+                
+                # Decode content if base64
+                import base64
+                if content_type == 'pdf' or content_type == 'base64':
+                    content = base64.b64decode(content)
+                
+                if sys.platform == 'win32':
+                    import win32print
+                    import win32api
+                    
+                    # For raw printing
+                    if content_type == 'raw':
+                        hPrinter = win32print.OpenPrinter(printer_name)
+                        try:
+                            hJob = win32print.StartDocPrinter(hPrinter, 1, ("AITS Print Job", None, "RAW"))
+                            win32print.StartPagePrinter(hPrinter)
+                            win32print.WritePrinter(hPrinter, content if isinstance(content, bytes) else content.encode())
+                            win32print.EndPagePrinter(hPrinter)
+                            win32print.EndDocPrinter(hPrinter)
+                        finally:
+                            win32print.ClosePrinter(hPrinter)
+                    else:
+                        # For PDF, save to temp file and print
+                        import tempfile
+                        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+                            f.write(content)
+                            temp_path = f.name
+                        win32api.ShellExecute(0, "print", temp_path, f'/d:"{printer_name}"', ".", 0)
+                        
+                    return jsonify({'success': True, 'message': 'Print job sent'})
+                else:
+                    import subprocess
+                    subprocess.run(['lp', '-d', printer_name], input=content if isinstance(content, bytes) else content.encode())
+                    return jsonify({'success': True, 'message': 'Print job sent'})
+                    
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
         
     def create_image(self):
         """Create icon image"""
@@ -114,26 +275,24 @@ class PrintServerTray:
         return image
     
     def start_server(self):
-        """Start the print server"""
-        if self.server_process is None or self.server_process.poll() is not None:
+        """Start the print server in a thread"""
+        if not self.server_running:
             try:
-                python_exe = sys.executable
-                self.server_process = subprocess.Popen(
-                    [python_exe, str(self.server_script)],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    cwd=str(self.base_dir)
-                )
-                print("Print server started")
+                def run_server():
+                    from waitress import serve
+                    self.server_running = True
+                    serve(self.flask_app, host='0.0.0.0', port=self.server_port, _quiet=True)
+                
+                self.server_thread = threading.Thread(target=run_server, daemon=True)
+                self.server_thread.start()
+                print(f"Print server started on port {self.server_port}")
             except Exception as e:
                 print(f"Error starting server: {e}")
     
     def stop_server(self):
         """Stop the print server"""
-        if self.server_process and self.server_process.poll() is None:
-            self.server_process.terminate()
-            self.server_process.wait()
-            print("Print server stopped")
+        self.server_running = False
+        print("Print server stopped")
     
     def restart_server(self, icon, item):
         """Restart the print server"""
@@ -151,7 +310,7 @@ class PrintServerTray:
     
     def get_status_text(self):
         """Get server status text"""
-        if self.server_process and self.server_process.poll() is None:
+        if self.server_running:
             return "Status: Running"
         return "Status: Stopped"
     
