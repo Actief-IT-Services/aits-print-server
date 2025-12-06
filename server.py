@@ -8,6 +8,7 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+import requests as requests_lib  # For making HTTP requests to Odoo
 
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -65,6 +66,16 @@ logger = logging.getLogger(__name__)
 init_auth(config['security']['api_keys'])
 printer_manager = PrinterManager(config['printer'])
 job_queue = JobQueue(config['printer'])
+
+# Initialize Odoo client (for polling mode)
+odoo_client = None
+try:
+    from odoo_client import OdooClient
+    odoo_client = OdooClient(config, printer_manager)
+except ImportError:
+    logger.warning("Odoo client not available")
+except Exception as e:
+    logger.warning(f"Failed to initialize Odoo client: {e}")
 
 
 @app.route('/', methods=['GET'])
@@ -323,6 +334,163 @@ def get_statistics():
         
     except Exception as e:
         logger.error(f"Error getting statistics: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# ============== Odoo Connection Endpoints ==============
+
+@app.route('/api/config', methods=['GET'])
+@app.route('/api/v1/config', methods=['GET'])
+def get_config():
+    """Get current configuration (safe subset)"""
+    # Check odoo connection only if enabled and configured
+    odoo_connected = False
+    if odoo_client and odoo_client.enabled and odoo_client.odoo_url:
+        try:
+            odoo_connected = odoo_client.test_connection().get('success', False)
+        except:
+            pass
+    
+    # Return only safe config values, not API keys
+    safe_config = {
+        'server': {
+            'host': config['server']['host'],
+            'port': config['server']['port'],
+        },
+        'odoo': {
+            'enabled': config.get('odoo', {}).get('enabled', False),
+            'url': config.get('odoo', {}).get('url', ''),
+            'database': config.get('odoo', {}).get('database', ''),
+            'poll_interval': config.get('odoo', {}).get('poll_interval', 10),
+            'server_name': config.get('odoo', {}).get('server_name', ''),
+            'connected': odoo_connected,
+        },
+        'ssl': {
+            'enabled': config.get('ssl', {}).get('enabled', False),
+        }
+    }
+    return jsonify(safe_config)
+
+
+@app.route('/api/odoo/test', methods=['POST'])
+@app.route('/api/v1/odoo/test', methods=['POST'])
+def test_odoo_connection():
+    """Test connection to Odoo instance"""
+    data = request.get_json() or {}
+    
+    # Use provided values or current config
+    odoo_url = data.get('url', config.get('odoo', {}).get('url', ''))
+    api_key = data.get('api_key', config.get('odoo', {}).get('api_key', ''))
+    database = data.get('database', config.get('odoo', {}).get('database', ''))
+    
+    if not odoo_url:
+        return jsonify({'success': False, 'error': 'Odoo URL is required'}), 400
+    
+    try:
+        # Test connection
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'DATABASE': database,
+            'Content-Type': 'application/json',
+        }
+        
+        test_url = f"{odoo_url.rstrip('/')}/api/v1/print/ping"
+        response = requests_lib.get(test_url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            return jsonify({
+                'success': True,
+                'message': 'Connection successful',
+                'odoo_version': response.json().get('version', 'unknown')
+            })
+        elif response.status_code == 401:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication failed - check API key'
+            }), 401
+        elif response.status_code == 404:
+            return jsonify({
+                'success': False,
+                'error': 'Odoo Direct Print module not installed or API endpoint not found'
+            }), 404
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Connection failed with status {response.status_code}'
+            }), 400
+            
+    except requests_lib.exceptions.ConnectionError:
+        return jsonify({
+            'success': False,
+            'error': f'Cannot connect to {odoo_url}'
+        }), 400
+    except requests_lib.exceptions.Timeout:
+        return jsonify({
+            'success': False,
+            'error': 'Connection timed out'
+        }), 400
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/odoo/save', methods=['POST'])
+@app.route('/api/v1/odoo/save', methods=['POST'])
+def save_odoo_config():
+    """Save Odoo connection configuration"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+    
+    try:
+        # Load current config
+        with open(config_path, 'r') as f:
+            current_config = yaml.safe_load(f)
+        
+        # Update Odoo section
+        if 'odoo' not in current_config:
+            current_config['odoo'] = {}
+        
+        if 'enabled' in data:
+            current_config['odoo']['enabled'] = data['enabled']
+        if 'url' in data:
+            current_config['odoo']['url'] = data['url']
+        if 'api_key' in data:
+            current_config['odoo']['api_key'] = data['api_key']
+        if 'database' in data:
+            current_config['odoo']['database'] = data['database']
+        if 'poll_interval' in data:
+            current_config['odoo']['poll_interval'] = int(data['poll_interval'])
+        
+        # Save config
+        with open(config_path, 'w') as f:
+            yaml.dump(current_config, f, default_flow_style=False)
+        
+        # Reload global config
+        global config
+        config = current_config
+        
+        # Restart Odoo client if needed
+        global odoo_client
+        if odoo_client:
+            odoo_client.stop()
+            odoo_client = OdooClient(config, printer_manager)
+            if config.get('odoo', {}).get('enabled'):
+                odoo_client.start()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Configuration saved'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error saving config: {e}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

@@ -1,10 +1,11 @@
-"""
-Cross-platform printer management
+"""Cross-platform printer management
 Supports CUPS (Linux) and Win32 (Windows)
 """
 
 import sys
 import logging
+import subprocess
+import shlex
 from typing import List, Dict, Optional
 import base64
 import tempfile
@@ -59,15 +60,137 @@ class PrinterManager:
     
     def get_printers(self) -> List[Dict]:
         """Get list of all available printers"""
-        if not self.backend_available:
-            logger.warning("Printer backend not available, returning empty list")
-            return []
+        if self.backend_available:
+            if self.platform.startswith('linux'):
+                return self._get_printers_cups()
+            elif self.platform == 'win32':
+                return self._get_printers_win32()
         
+        # Fallback: use command line tools
+        logger.info("Using fallback printer detection via command line")
         if self.platform.startswith('linux'):
-            return self._get_printers_cups()
+            return self._get_printers_lpstat()
         elif self.platform == 'win32':
-            return self._get_printers_win32()
+            return self._get_printers_powershell()
+        
+        logger.warning("No printer detection method available")
         return []
+    
+    def _get_printers_lpstat(self) -> List[Dict]:
+        """Get printers using lpstat command (fallback for Linux without pycups)"""
+        printers = []
+        try:
+            # Get list of printers
+            result = subprocess.run(
+                ['lpstat', '-p', '-d'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode != 0:
+                logger.warning(f"lpstat failed: {result.stderr}")
+                return []
+            
+            default_printer = None
+            
+            for line in result.stdout.strip().split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # Parse "printer HP-LaserJet is idle." or similar
+                if line.startswith('printer '):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        name = parts[1]
+                        state = 'ready'
+                        if 'disabled' in line.lower():
+                            state = 'offline'
+                        elif 'idle' in line.lower():
+                            state = 'idle'
+                        elif 'printing' in line.lower():
+                            state = 'printing'
+                        
+                        printers.append({
+                            'name': name,
+                            'description': '',
+                            'location': '',
+                            'model': '',
+                            'state': state,
+                            'accepting_jobs': 'disabled' not in line.lower(),
+                            'is_default': False
+                        })
+                
+                # Parse "system default destination: HP-LaserJet"
+                elif line.startswith('system default destination:'):
+                    default_printer = line.split(':')[1].strip()
+            
+            # Mark default printer
+            for printer in printers:
+                if printer['name'] == default_printer:
+                    printer['is_default'] = True
+            
+            logger.info(f"Found {len(printers)} printer(s) via lpstat")
+            return printers
+            
+        except FileNotFoundError:
+            logger.warning("lpstat command not found. Is CUPS installed?")
+            return []
+        except subprocess.TimeoutExpired:
+            logger.warning("lpstat command timed out")
+            return []
+        except Exception as e:
+            logger.error(f"Error running lpstat: {e}")
+            return []
+    
+    def _get_printers_powershell(self) -> List[Dict]:
+        """Get printers using PowerShell (fallback for Windows without pywin32)"""
+        printers = []
+        try:
+            # Use PowerShell to get printers
+            ps_cmd = 'Get-Printer | Select-Object Name, DriverName, PortName, PrinterStatus, Default | ConvertTo-Json'
+            result = subprocess.run(
+                ['powershell', '-Command', ps_cmd],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode != 0:
+                logger.warning(f"PowerShell failed: {result.stderr}")
+                return []
+            
+            import json
+            data = json.loads(result.stdout)
+            
+            # Handle single printer (not a list)
+            if isinstance(data, dict):
+                data = [data]
+            
+            for p in data:
+                printers.append({
+                    'name': p.get('Name', ''),
+                    'description': p.get('DriverName', ''),
+                    'location': '',
+                    'model': p.get('DriverName', ''),
+                    'state': 'ready' if p.get('PrinterStatus') == 0 else 'offline',
+                    'accepting_jobs': True,
+                    'is_default': p.get('Default', False)
+                })
+            
+            logger.info(f"Found {len(printers)} printer(s) via PowerShell")
+            return printers
+            
+        except FileNotFoundError:
+            logger.warning("PowerShell not found")
+            return []
+        except subprocess.TimeoutExpired:
+            logger.warning("PowerShell command timed out")
+            return []
+        except Exception as e:
+            logger.error(f"Error running PowerShell: {e}")
+            return []
     
     def _get_printers_cups(self) -> List[Dict]:
         """Get printers from CUPS"""

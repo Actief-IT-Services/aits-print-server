@@ -315,6 +315,7 @@
             
             <div class="tabs">
                 <button class="tab active" onclick="switchTab('server')">Server Settings</button>
+                <button class="tab" onclick="switchTab('odoo')">Odoo Connection</button>
                 <button class="tab" onclick="switchTab('printers')">Printers</button>
                 <button class="tab" onclick="switchTab('about')">About</button>
             </div>
@@ -382,6 +383,71 @@
                     <button class="btn btn-primary" onclick="saveConfig()">💾 Save Configuration</button>
                     <button class="btn btn-secondary" onclick="loadConfig()">🔄 Reload</button>
                     <button class="btn btn-success" onclick="testConnection()">✓ Test Connection</button>
+                </div>
+            </div>
+            
+            <!-- Odoo Connection Tab -->
+            <div id="odoo-tab" class="tab-content">
+                <div class="section">
+                    <div class="section-title">Odoo Cloud Connection</div>
+                    <p style="margin-bottom: 15px; color: #6c757d;">
+                        Configure the print server to connect to your Odoo instance (e.g., Odoo.sh, cloud VPS). 
+                        The server will poll Odoo for pending print jobs.
+                    </p>
+                    
+                    <div class="form-group">
+                        <label for="odooEnabled">Enable Odoo Polling</label>
+                        <select id="odooEnabled">
+                            <option value="false">Disabled</option>
+                            <option value="true">Enabled</option>
+                        </select>
+                        <small>Enable to poll Odoo for print jobs</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="odooUrl">Odoo URL</label>
+                        <input type="text" id="odooUrl" placeholder="https://your-company.odoo.com">
+                        <small>Your Odoo instance URL (include https://)</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="odooDatabase">Database</label>
+                        <input type="text" id="odooDatabase" placeholder="your-database">
+                        <small>Odoo database name</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="odooApiKey">API Key</label>
+                        <input type="password" id="odooApiKey" placeholder="Your API key from Odoo">
+                        <small>Generate this in Odoo: Settings → Users → API Keys</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="odooPollInterval">Poll Interval (seconds)</label>
+                        <input type="number" id="odooPollInterval" value="5" min="1" max="60">
+                        <small>How often to check for new print jobs</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="odooServerName">Server Name</label>
+                        <input type="text" id="odooServerName" placeholder="Office Print Server">
+                        <small>A friendly name for this print server</small>
+                    </div>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="saveOdooConfig()">💾 Save Odoo Settings</button>
+                    <button class="btn btn-success" onclick="testOdooConnection()">✓ Test Connection</button>
+                </div>
+                
+                <div id="odooStatus" class="section" style="margin-top: 20px; display: none;">
+                    <div class="section-title">Connection Status</div>
+                    <div id="odooStatusContent" class="printer-list">
+                        <div class="printer-item">
+                            <div class="printer-name">Status</div>
+                            <div class="printer-status" id="odooConnectionStatus">Not connected</div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -612,10 +678,107 @@
             }
         }
         
+        // Load Odoo configuration
+        async function loadOdooConfig() {
+            try {
+                const response = await fetch(API_BASE + '/api/config');
+                if (!response.ok) return;
+                
+                const config = await response.json();
+                
+                if (config.odoo) {
+                    document.getElementById('odooEnabled').value = String(config.odoo.enabled || false);
+                    document.getElementById('odooUrl').value = config.odoo.url || '';
+                    document.getElementById('odooDatabase').value = config.odoo.database || '';
+                    document.getElementById('odooApiKey').value = config.odoo.api_key || '';
+                    document.getElementById('odooPollInterval').value = config.odoo.poll_interval || 5;
+                    document.getElementById('odooServerName').value = config.odoo.server_name || '';
+                }
+            } catch (error) {
+                console.error('Error loading Odoo config:', error);
+            }
+        }
+        
+        // Save Odoo configuration
+        async function saveOdooConfig() {
+            const odooConfig = {
+                odoo: {
+                    enabled: document.getElementById('odooEnabled').value === 'true',
+                    url: document.getElementById('odooUrl').value,
+                    database: document.getElementById('odooDatabase').value,
+                    api_key: document.getElementById('odooApiKey').value,
+                    poll_interval: parseInt(document.getElementById('odooPollInterval').value) || 5,
+                    server_name: document.getElementById('odooServerName').value
+                }
+            };
+            
+            try {
+                const response = await fetch(API_BASE + '/api/odoo/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(odooConfig)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showAlert('✓ Odoo settings saved! Restart the server for changes to take effect.', 'success');
+                } else {
+                    showAlert('✗ Error saving Odoo settings: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('✗ Error saving Odoo settings: ' + error.message, 'error');
+            }
+        }
+        
+        // Test Odoo connection
+        async function testOdooConnection() {
+            const odooConfig = {
+                url: document.getElementById('odooUrl').value,
+                database: document.getElementById('odooDatabase').value,
+                api_key: document.getElementById('odooApiKey').value
+            };
+            
+            if (!odooConfig.url || !odooConfig.api_key) {
+                showAlert('✗ Please enter Odoo URL and API Key', 'error');
+                return;
+            }
+            
+            showAlert('Testing Odoo connection...', 'info');
+            document.getElementById('odooStatus').style.display = 'block';
+            document.getElementById('odooConnectionStatus').textContent = 'Testing...';
+            
+            try {
+                const response = await fetch(API_BASE + '/api/odoo/test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(odooConfig)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showAlert('✓ Odoo connection successful!', 'success');
+                    document.getElementById('odooConnectionStatus').textContent = 'Connected - ' + (data.message || 'OK');
+                } else {
+                    showAlert('✗ Odoo connection failed: ' + (data.error || 'Unknown error'), 'error');
+                    document.getElementById('odooConnectionStatus').textContent = 'Failed - ' + (data.error || 'Unknown error');
+                }
+            } catch (error) {
+                showAlert('✗ Odoo connection failed: ' + error.message, 'error');
+                document.getElementById('odooConnectionStatus').textContent = 'Failed - ' + error.message;
+            }
+        }
+        
         // Initialize
         window.addEventListener('load', () => {
             checkStatus();
             loadConfig();
+            loadOdooConfig();
             refreshPrinters();
             
             // Refresh status every 30 seconds

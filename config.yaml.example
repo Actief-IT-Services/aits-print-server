@@ -41,8 +41,8 @@ logging:
   backup_count: 5
 
 security:
-  # API authentication (not implemented yet - for future use)
-  # api_key: your-secret-key-here
+  # API key for authenticating requests TO this print server
+  api_key: your-secret-key-here
   
   # Allowed IP addresses (empty = allow all)
   # allowed_ips:
@@ -53,3 +53,17 @@ security:
   # cors_origins:
   #   - http://localhost:8069
   #   - https://your-odoo-domain.com
+
+# Odoo Connection Configuration
+# Used when print server needs to connect TO Odoo (cloud/Odoo.sh scenarios)
+# The print server will poll Odoo for pending print jobs
+odoo:
+  enabled: false                           # Enable Odoo polling
+  url: https://your-company.odoo.com       # Your Odoo instance URL
+  database: your-database                  # Odoo database name
+  api_key: your-odoo-api-key              # API key generated in Odoo
+  poll_interval: 5                         # How often to poll (seconds)
+  
+  # Server identification (used when registering with Odoo)
+  server_name: Office Print Server         # Friendly name for this server
+  location: Main Office                    # Optional location description
