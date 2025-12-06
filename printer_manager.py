@@ -20,6 +20,9 @@ class PrinterManager:
         """Initialize printer manager with configuration"""
         self.config = config
         self.platform = sys.platform
+        self.cups_conn = None
+        self.win32print = None
+        self.backend_available = False
         
         # Initialize platform-specific backend
         if self.platform.startswith('linux'):
@@ -27,41 +30,50 @@ class PrinterManager:
         elif self.platform == 'win32':
             self._init_win32()
         else:
-            raise RuntimeError(f"Unsupported platform: {self.platform}")
+            logger.warning(f"Unsupported platform: {self.platform}, using fallback mode")
     
     def _init_cups(self):
         """Initialize CUPS backend for Linux"""
         try:
             import cups
             self.cups_conn = cups.Connection()
+            self.backend_available = True
             logger.info("CUPS backend initialized")
         except ImportError:
-            logger.error("python-cups not installed. Install with: pip install pycups")
-            raise
+            logger.warning("python-cups not installed. Printer features will be limited. Install with: pip install pycups")
+            self.backend_available = False
         except Exception as e:
-            logger.error(f"Failed to connect to CUPS: {e}")
-            raise
+            logger.warning(f"Failed to connect to CUPS: {e}. Printer features will be limited.")
+            self.backend_available = False
     
     def _init_win32(self):
         """Initialize Win32 backend for Windows"""
         try:
             import win32print
             self.win32print = win32print
+            self.backend_available = True
             logger.info("Win32 print backend initialized")
         except ImportError:
-            logger.error("pywin32 not installed. Install with: pip install pywin32")
-            raise
+            logger.warning("pywin32 not installed. Printer features will be limited. Install with: pip install pywin32")
+            self.backend_available = False
     
     def get_printers(self) -> List[Dict]:
         """Get list of all available printers"""
+        if not self.backend_available:
+            logger.warning("Printer backend not available, returning empty list")
+            return []
+        
         if self.platform.startswith('linux'):
             return self._get_printers_cups()
         elif self.platform == 'win32':
             return self._get_printers_win32()
+        return []
     
     def _get_printers_cups(self) -> List[Dict]:
         """Get printers from CUPS"""
         printers = []
+        if not self.cups_conn:
+            return printers
         try:
             cups_printers = self.cups_conn.getPrinters()
             

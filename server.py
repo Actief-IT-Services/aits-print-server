@@ -9,7 +9,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import yaml
 
@@ -17,8 +17,11 @@ from printer_manager import PrinterManager
 from job_queue import JobQueue
 from auth import require_api_key, init_auth
 
+# Get base directory
+BASE_DIR = Path(__file__).parent
+
 # Initialize Flask app
-app = Flask(__name__)
+app = Flask(__name__, static_folder=str(BASE_DIR / 'static'))
 CORS(app)
 
 # Load configuration
@@ -69,7 +72,7 @@ def index():
     """Root endpoint - API information"""
     return jsonify({
         'name': 'AITS Print Server',
-        'version': '1.0.0',
+        'version': '19.0.1.0.0',
         'status': 'running',
         'platform': sys.platform,
         'endpoints': {
@@ -77,11 +80,24 @@ def index():
             'printers': '/api/v1/printers',
             'print': '/api/v1/print (POST)',
             'jobs': '/api/v1/jobs',
-            'stats': '/api/v1/stats'
+            'stats': '/api/v1/stats',
+            'config': '/config'
         },
         'authentication': 'API Key required (X-API-Key header)',
         'documentation': 'See README.md for full API documentation'
     })
+
+
+@app.route('/config', methods=['GET'])
+def config_page():
+    """Serve the configuration page"""
+    return send_from_directory(BASE_DIR / 'static', 'config.html')
+
+
+@app.route('/static/<path:filename>', methods=['GET'])
+def serve_static(filename):
+    """Serve static files"""
+    return send_from_directory(BASE_DIR / 'static', filename)
 
 
 @app.route('/api/health', methods=['GET'])
