@@ -100,22 +100,29 @@ def serve_static(filename):
     return send_from_directory(BASE_DIR / 'static', filename)
 
 
+@app.route('/favicon.ico', methods=['GET'])
+def favicon():
+    """Serve favicon"""
+    return send_from_directory(BASE_DIR / 'static', 'icon.ico')
+
+
+@app.route('/health', methods=['GET'])
 @app.route('/api/health', methods=['GET'])
 @app.route('/api/v1/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'version': '1.0.0',
+        'version': '19.0.1.0.0',
         'platform': sys.platform
     })
 
 
+@app.route('/printers', methods=['GET'])
 @app.route('/api/printers', methods=['GET'])
 @app.route('/api/v1/printers', methods=['GET'])
-@require_api_key
 def list_printers():
-    """List all available printers"""
+    """List all available printers - no auth required for web UI"""
     try:
         printers = printer_manager.get_printers()
         return jsonify({
@@ -342,30 +349,54 @@ def internal_error(error):
 if __name__ == '__main__':
     logger.info("Starting AITS Print Server...")
     logger.info(f"Platform: {sys.platform}")
-    logger.info(f"Server will listen on {config['server']['host']}:{config['server']['port']}")
+    
+    host = config['server']['host']
+    port = config['server']['port']
+    
+    # Check for SSL configuration
+    ssl_config = config.get('ssl', {})
+    ssl_enabled = ssl_config.get('enabled', False)
+    ssl_context = None
+    
+    if ssl_enabled:
+        cert_file = BASE_DIR / ssl_config.get('cert_file', 'certs/server.crt')
+        key_file = BASE_DIR / ssl_config.get('key_file', 'certs/server.key')
+        
+        if cert_file.exists() and key_file.exists():
+            ssl_context = (str(cert_file), str(key_file))
+            logger.info(f"SSL enabled - Server will listen on https://{host}:{port}")
+        else:
+            logger.warning(f"SSL certificate not found at {cert_file}. Run 'python generate_ssl_cert.py' to generate one.")
+            logger.info(f"Falling back to HTTP - Server will listen on http://{host}:{port}")
+    else:
+        logger.info(f"Server will listen on http://{host}:{port}")
     
     # Start job queue processor
     job_queue.start()
     
     try:
         if sys.platform == 'win32':
-            # Use waitress on Windows
+            # Use waitress on Windows (doesn't support SSL directly)
             from waitress import serve
-            serve(app, host=config['server']['host'], port=config['server']['port'])
+            if ssl_enabled and ssl_context:
+                logger.warning("Waitress doesn't support SSL directly. Consider using a reverse proxy.")
+            serve(app, host=host, port=port)
         else:
-            # Use gunicorn on Linux (or Flask's built-in server in debug mode)
+            # Use Flask's built-in server or gunicorn
             if config['server']['debug']:
                 app.run(
-                    host=config['server']['host'],
-                    port=config['server']['port'],
-                    debug=True
+                    host=host,
+                    port=port,
+                    debug=True,
+                    ssl_context=ssl_context
                 )
             else:
-                # For production, use: gunicorn -w 4 -b 0.0.0.0:8888 server:app
+                # For production with SSL
                 app.run(
-                    host=config['server']['host'],
-                    port=config['server']['port'],
-                    debug=False
+                    host=host,
+                    port=port,
+                    debug=False,
+                    ssl_context=ssl_context
                 )
     except KeyboardInterrupt:
         logger.info("Shutting down gracefully...")

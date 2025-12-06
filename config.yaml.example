@@ -7,6 +7,13 @@ server:
   port: 8888         # Port to listen on
   debug: false       # Enable debug mode (do not use in production)
 
+# SSL/HTTPS Configuration (optional)
+ssl:
+  enabled: false     # Set to true to enable HTTPS
+  cert_file: certs/server.crt   # Path to SSL certificate
+  key_file: certs/server.key    # Path to SSL private key
+  # To generate a self-signed certificate, run: python generate_ssl_cert.py
+
 printing:
   # Default printer (null = use system default)
   default_printer: null
