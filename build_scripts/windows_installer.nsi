@@ -48,8 +48,8 @@ Section "MainSection" SEC01
   SetOutPath "$INSTDIR"
   SetOverwrite ifnewer
   
-  ; Copy main executable
-  File "..\dist\AITS_Print_Server.exe"
+  ; Copy main executable (from dist folder in build_scripts)
+  File "dist\AITS_Print_Server.exe"
   
   ; Copy configuration files
   File /nonfatal "..\config.yaml.example"
