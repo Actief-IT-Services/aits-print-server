@@ -458,33 +458,62 @@ class PrinterManager:
             
             logger.info(f"Printing {document_name} to {printer_name} with options: {cups_options}")
             
-            # Submit print job
-            job_id = self.cups_conn.printFile(
-                printer_name,
-                temp_file.name,
-                document_name,
-                cups_options
-            )
-            
-            logger.info(f"CUPS job {job_id} submitted to {printer_name}")
-            
-            # Give CUPS time to read the file before we delete it
-            time.sleep(1)
-            
-            # Verify job was accepted
-            try:
-                jobs = self.cups_conn.getJobs(which_jobs='not-completed')
-                if job_id in jobs:
-                    logger.info(f"CUPS job {job_id} is in queue: {jobs[job_id]}")
-                else:
-                    # Job might have already completed or failed
-                    jobs_completed = self.cups_conn.getJobs(which_jobs='completed')
-                    if job_id in jobs_completed:
-                        logger.info(f"CUPS job {job_id} completed immediately")
+            # Use CUPS library if available, otherwise fall back to lp command
+            if self.cups_conn:
+                # Submit print job via CUPS library
+                job_id = self.cups_conn.printFile(
+                    printer_name,
+                    temp_file.name,
+                    document_name,
+                    cups_options
+                )
+                
+                logger.info(f"CUPS job {job_id} submitted to {printer_name}")
+                
+                # Give CUPS time to read the file before we delete it
+                time.sleep(1)
+                
+                # Verify job was accepted
+                try:
+                    jobs = self.cups_conn.getJobs(which_jobs='not-completed')
+                    if job_id in jobs:
+                        logger.info(f"CUPS job {job_id} is in queue: {jobs[job_id]}")
                     else:
-                        logger.warning(f"CUPS job {job_id} not found in queue")
-            except Exception as e:
-                logger.warning(f"Could not verify job status: {e}")
+                        # Job might have already completed or failed
+                        jobs_completed = self.cups_conn.getJobs(which_jobs='completed')
+                        if job_id in jobs_completed:
+                            logger.info(f"CUPS job {job_id} completed immediately")
+                        else:
+                            logger.warning(f"CUPS job {job_id} not found in queue")
+                except Exception as e:
+                    logger.warning(f"Could not verify job status: {e}")
+            else:
+                # Fallback: use lp command
+                logger.info(f"Using lp command fallback (pycups not installed)")
+                cmd = ['lp', '-d', printer_name]
+                
+                # Add copies
+                if copies > 1:
+                    cmd.extend(['-n', str(copies)])
+                
+                # Add title
+                if document_name:
+                    cmd.extend(['-t', document_name])
+                
+                # Add the file to print
+                cmd.append(temp_file.name)
+                
+                logger.info(f"Running: {' '.join(cmd)}")
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                
+                if result.returncode == 0:
+                    logger.info(f"lp command succeeded: {result.stdout.strip()}")
+                else:
+                    logger.error(f"lp command failed: {result.stderr.strip()}")
+                    return False
+                
+                # Give CUPS time to process
+                time.sleep(1)
             
             return True
                         

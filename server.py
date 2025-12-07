@@ -453,20 +453,24 @@ def save_odoo_config():
         with open(config_path, 'r') as f:
             current_config = yaml.safe_load(f)
         
-        # Update Odoo section
+        # Update Odoo section - handle both nested and flat formats
+        odoo_data = data.get('odoo', data)  # Support { odoo: {...} } or flat {...}
+        
         if 'odoo' not in current_config:
             current_config['odoo'] = {}
         
-        if 'enabled' in data:
-            current_config['odoo']['enabled'] = data['enabled']
-        if 'url' in data:
-            current_config['odoo']['url'] = data['url']
-        if 'api_key' in data:
-            current_config['odoo']['api_key'] = data['api_key']
-        if 'database' in data:
-            current_config['odoo']['database'] = data['database']
-        if 'poll_interval' in data:
-            current_config['odoo']['poll_interval'] = int(data['poll_interval'])
+        if 'enabled' in odoo_data:
+            current_config['odoo']['enabled'] = odoo_data['enabled']
+        if 'url' in odoo_data:
+            current_config['odoo']['url'] = odoo_data['url'].rstrip('/')
+        if 'api_key' in odoo_data:
+            current_config['odoo']['api_key'] = odoo_data['api_key']
+        if 'database' in odoo_data:
+            current_config['odoo']['database'] = odoo_data['database']
+        if 'poll_interval' in odoo_data:
+            current_config['odoo']['poll_interval'] = int(odoo_data['poll_interval'])
+        if 'server_name' in odoo_data:
+            current_config['odoo']['server_name'] = odoo_data['server_name']
         
         # Save config
         with open(config_path, 'w') as f:
@@ -480,13 +484,13 @@ def save_odoo_config():
         global odoo_client
         if odoo_client:
             odoo_client.stop()
-            odoo_client = OdooClient(config, printer_manager)
-            if config.get('odoo', {}).get('enabled'):
-                odoo_client.start()
+        odoo_client = OdooClient(config, printer_manager)
+        if config.get('odoo', {}).get('enabled'):
+            odoo_client.start()
         
         return jsonify({
             'success': True,
-            'message': 'Configuration saved'
+            'message': 'Configuration saved and applied'
         })
         
     except Exception as e:
@@ -541,6 +545,11 @@ if __name__ == '__main__':
     
     # Start job queue processor
     job_queue.start()
+    
+    # Start Odoo client if enabled
+    if odoo_client and config.get('odoo', {}).get('enabled'):
+        odoo_client.start()
+        logger.info("Odoo polling client started")
     
     try:
         if sys.platform == 'win32':

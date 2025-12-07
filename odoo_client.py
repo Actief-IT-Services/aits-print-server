@@ -76,8 +76,14 @@ class OdooClient:
     
     def _poll_loop(self):
         """Main polling loop"""
+        heartbeat_counter = 0
         while self.running:
             try:
+                # Send heartbeat every 3rd poll (every 30 seconds at default 10s interval)
+                if heartbeat_counter % 3 == 0:
+                    self._send_heartbeat()
+                heartbeat_counter += 1
+                
                 self._check_and_process_jobs()
             except Exception as e:
                 logger.error(f"Error in poll loop: {e}", exc_info=True)
@@ -88,12 +94,47 @@ class OdooClient:
                     break
                 time.sleep(1)
     
+    def _send_heartbeat(self):
+        """Send heartbeat to Odoo with printer information"""
+        try:
+            # Get list of printers from printer manager
+            printers = []
+            if self.printer_manager:
+                printer_list = self.printer_manager.get_printers()
+                for p in printer_list:
+                    printers.append({
+                        'name': p.get('name', ''),
+                        'description': p.get('description', p.get('name', '')),
+                        'location': p.get('location', ''),
+                        'status': p.get('status', 'ready')
+                    })
+            
+            data = {
+                'printers': printers,
+                'server_name': self.config.get('server_name', 'Print Server')
+            }
+            
+            result = self._make_request('/api/v1/print/server/heartbeat', method='POST', data=data)
+            
+            if result and result.get('success'):
+                logger.debug(f"Heartbeat sent - {len(printers)} printer(s) synced")
+            else:
+                logger.warning(f"Heartbeat failed: {result}")
+                
+        except Exception as e:
+            logger.error(f"Error sending heartbeat: {e}")
+    
     def _make_request(self, endpoint: str, method: str = 'GET', data: dict = None) -> Optional[dict]:
         """Make authenticated request to Odoo"""
         url = f"{self.odoo_url}{endpoint}"
+        
+        # Get server name from config
+        server_name = self.config.get('server_name', 'Print Server')
+        
         headers = {
             'Authorization': f'Bearer {self.api_key}',
             'DATABASE': self.database,
+            'X-Server-Name': server_name,
         }
         
         try:
@@ -156,26 +197,40 @@ class OdooClient:
         """Process a single print job"""
         job_id = job.get('id')
         printer_name = job.get('printer_name')
-        content_type = job.get('content_type', 'pdf')
+        document_type = job.get('document_type', 'pdf')
+        
+        # If no printer specified, use system default or first available
+        if not printer_name:
+            printers = self.printer_manager.get_printers()
+            if printers:
+                printer_name = printers[0].get('name')
+                logger.info(f"No printer specified, using default: {printer_name}")
+            else:
+                logger.error(f"Job {job_id}: No printer specified and no printers available")
+                self._update_job_status(job_id, 'failed', 'No printer available')
+                return
         
         logger.info(f"Processing job {job_id} for printer {printer_name}")
         
         try:
-            # Mark job as processing
-            self._update_job_status(job_id, 'processing')
+            # Mark job as processing (claim it)
+            claim_result = self._make_request(f'/api/v1/print/jobs/{job_id}/claim', method='POST')
+            if not claim_result or not claim_result.get('success'):
+                logger.warning(f"Failed to claim job {job_id}, skipping")
+                return
             
-            # Get the document content
-            content_url = job.get('content_url')
+            # Get the document content - try various field names
+            content_b64 = job.get('document_data') or job.get('content') or job.get('file_data')
+            content_url = job.get('content_url') or job.get('document_url')
+            
             if content_url:
                 # Download content from URL
                 content = self._download_content(content_url)
-            else:
+            elif content_b64:
                 # Content is inline (base64 encoded)
-                content_b64 = job.get('content')
-                if content_b64:
-                    content = base64.b64decode(content_b64)
-                else:
-                    raise ValueError("No content or content_url in job")
+                content = base64.b64decode(content_b64)
+            else:
+                raise ValueError("No document data in job")
             
             if not content:
                 raise ValueError("Failed to get job content")
@@ -184,7 +239,7 @@ class OdooClient:
             success = self._print_document(
                 printer_name=printer_name,
                 content=content,
-                content_type=content_type,
+                content_type=document_type,
                 options=job.get('options', {})
             )
             
@@ -222,32 +277,30 @@ class OdooClient:
                         content_type: str, options: dict) -> bool:
         """Print document using printer manager"""
         try:
-            # Save content to temp file if needed
+            # Determine file extension
             if content_type == 'pdf':
                 suffix = '.pdf'
-            elif content_type == 'raw':
+            elif content_type in ('raw', 'text'):
                 suffix = '.txt'
             else:
-                suffix = ''
+                suffix = '.pdf'  # Default to PDF
             
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
-                f.write(content)
-                temp_path = f.name
+            # Re-encode content to base64 for printer manager
+            document_b64 = base64.b64encode(content).decode('utf-8')
+            document_name = f"odoo_job{suffix}"
             
-            try:
-                # Use printer manager to print
-                result = self.printer_manager.print_file(
-                    printer_name=printer_name,
-                    file_path=temp_path,
-                    options=options
-                )
-                return result.get('success', False)
-            finally:
-                # Cleanup temp file
-                try:
-                    os.unlink(temp_path)
-                except:
-                    pass
+            # Extract options
+            copies = options.get('copies', 1) if options else 1
+            
+            # Use printer manager to print
+            result = self.printer_manager.print_document(
+                printer_name=printer_name,
+                document=document_b64,
+                document_name=document_name,
+                copies=copies,
+                options=options
+            )
+            return result
                     
         except Exception as e:
             logger.error(f"Print error: {e}")
@@ -256,13 +309,16 @@ class OdooClient:
     def _update_job_status(self, job_id: int, status: str, error_message: str = None):
         """Update job status in Odoo"""
         data = {
-            'job_id': job_id,
             'status': status,
         }
         if error_message:
-            data['error_message'] = error_message
+            data['error'] = error_message
         
-        self._make_request('/api/v1/print/jobs/update', method='POST', data=data)
+        result = self._make_request(f'/api/v1/print/jobs/{job_id}/update', method='POST', data=data)
+        if result:
+            logger.info(f"Job {job_id} status updated to {status}")
+        else:
+            logger.warning(f"Failed to update job {job_id} status to {status}")
     
     def register_server(self) -> bool:
         """Register this print server with Odoo"""
