@@ -9,15 +9,38 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import platform
-import requests as requests_lib  # For making HTTP requests to Odoo
+import traceback
 
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
-import yaml
+# Early console output for debugging
+print("=" * 60)
+print("AITS Print Server - server.py loading...")
+print(f"Python: {sys.version}")
+print(f"Platform: {platform.system()} {platform.release()}")
+print(f"Frozen: {getattr(sys, 'frozen', False)}")
+print(f"Executable: {sys.executable}")
+print("=" * 60)
 
-from printer_manager import PrinterManager
-from job_queue import JobQueue
-from auth import require_api_key, init_auth
+try:
+    import requests as requests_lib  # For making HTTP requests to Odoo
+    print("✓ requests imported")
+except ImportError as e:
+    print(f"✗ Failed to import requests: {e}")
+    requests_lib = None
+
+try:
+    from flask import Flask, request, jsonify, send_from_directory
+    from flask_cors import CORS
+    print("✓ Flask imported")
+except ImportError as e:
+    print(f"✗ Failed to import Flask: {e}")
+    raise
+
+try:
+    import yaml
+    print("✓ yaml imported")
+except ImportError as e:
+    print(f"✗ Failed to import yaml: {e}")
+    raise
 
 
 def get_data_dir():
@@ -63,31 +86,51 @@ if getattr(sys, 'frozen', False):
 else:
     BASE_DIR = Path(__file__).parent
 
+print(f"Base directory: {BASE_DIR}")
+
 # Get data directory for logs, etc.
 DATA_DIR = get_data_dir()
+print(f"Data directory: {DATA_DIR}")
 
 # Initialize Flask app
 app = Flask(__name__, static_folder=str(BASE_DIR / 'static'))
 CORS(app)
+print("✓ Flask app initialized")
 
 # Load configuration
 config_path = get_config_path()
+print(f"Config path: {config_path}")
+
 if not config_path.exists():
-    print(f"Error: config.yaml not found at {config_path}")
-    print(f"Please copy config.yaml.example to {config_path}")
-    sys.exit(1)
-
-print(f"Loading config from: {config_path}")
-
-with open(config_path, 'r') as f:
-    config = yaml.safe_load(f)
+    print(f"WARNING: config.yaml not found at {config_path}")
+    print(f"Creating default config...")
+    # Create a default config instead of exiting
+    config = {
+        'server': {'host': '0.0.0.0', 'port': 8888, 'debug': False},
+        'printer': {'default_printer': None, 'timeout': 30, 'max_file_size': 52428800},
+        'security': {'api_keys': ['default-key-change-me']},
+        'logging': {'level': 'DEBUG', 'file': 'server.log', 'max_bytes': 10485760, 'backup_count': 5},
+        'odoo': {'enabled': False, 'url': '', 'database': '', 'api_key': '', 'poll_interval': 10}
+    }
+    # Save default config
+    try:
+        with open(config_path, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
+        print(f"✓ Created default config at {config_path}")
+    except Exception as e:
+        print(f"Could not save default config: {e}")
+else:
+    print(f"Loading config from: {config_path}")
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    print("✓ Config loaded")
 
 # Setup logging - use DATA_DIR for logs (writable location)
 log_dir = DATA_DIR / 'logs'
 try:
     log_dir.mkdir(parents=True, exist_ok=True)
     print(f"Log directory: {log_dir}")
-except PermissionError:
+except PermissionError as e:
     # Fallback to temp directory
     import tempfile
     log_dir = Path(tempfile.gettempdir()) / 'aits_print_server' / 'logs'
@@ -98,40 +141,106 @@ log_file = log_dir / Path(config['logging']['file']).name
 log_max_bytes = config['logging'].get('max_bytes', 10485760)  # Default 10MB
 log_backup_count = config['logging'].get('backup_count', 5)
 
+print(f"Log file: {log_file}")
+
 # Create rotating file handler
-file_handler = RotatingFileHandler(
-    log_file,
-    maxBytes=log_max_bytes,
-    backupCount=log_backup_count
-)
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+try:
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=log_max_bytes,
+        backupCount=log_backup_count
+    )
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    print("✓ File handler created")
+except Exception as e:
+    print(f"✗ Failed to create file handler: {e}")
+    file_handler = None
 
 # Create stream handler for console
 stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 
 # Configure root logger
+handlers = [stream_handler]
+if file_handler:
+    handlers.append(file_handler)
+
 logging.basicConfig(
-    level=getattr(logging, config['logging']['level']),
-    handlers=[file_handler, stream_handler]
+    level=getattr(logging, config['logging'].get('level', 'DEBUG')),
+    handlers=handlers
 )
 
 logger = logging.getLogger(__name__)
+logger.info("Logging initialized")
+
+# Import and initialize components with error handling
+print("Importing components...")
+
+try:
+    from printer_manager import PrinterManager
+    print("✓ PrinterManager imported")
+except ImportError as e:
+    print(f"✗ Failed to import PrinterManager: {e}")
+    traceback.print_exc()
+    raise
+
+try:
+    from job_queue import JobQueue
+    print("✓ JobQueue imported")
+except ImportError as e:
+    print(f"✗ Failed to import JobQueue: {e}")
+    traceback.print_exc()
+    raise
+
+try:
+    from auth import require_api_key, init_auth
+    print("✓ auth imported")
+except ImportError as e:
+    print(f"✗ Failed to import auth: {e}")
+    traceback.print_exc()
+    raise
 
 # Initialize components
-init_auth(config['security']['api_keys'])
-printer_manager = PrinterManager(config['printer'])
-job_queue = JobQueue(config['printer'])
+print("Initializing components...")
+
+try:
+    init_auth(config['security']['api_keys'])
+    print("✓ Auth initialized")
+except Exception as e:
+    print(f"✗ Failed to initialize auth: {e}")
+    traceback.print_exc()
+
+try:
+    printer_manager = PrinterManager(config['printer'])
+    print("✓ PrinterManager initialized")
+except Exception as e:
+    print(f"✗ Failed to initialize PrinterManager: {e}")
+    traceback.print_exc()
+    printer_manager = None
+
+try:
+    job_queue = JobQueue(config['printer'])
+    print("✓ JobQueue initialized")
+except Exception as e:
+    print(f"✗ Failed to initialize JobQueue: {e}")
+    traceback.print_exc()
+    job_queue = None
 
 # Initialize Odoo client (for polling mode)
 odoo_client = None
 try:
     from odoo_client import OdooClient
     odoo_client = OdooClient(config, printer_manager)
-except ImportError:
-    logger.warning("Odoo client not available")
+    print("✓ OdooClient initialized")
+except ImportError as e:
+    print(f"Odoo client not available: {e}")
 except Exception as e:
-    logger.warning(f"Failed to initialize Odoo client: {e}")
+    print(f"Failed to initialize Odoo client: {e}")
+    traceback.print_exc()
+
+print("=" * 60)
+print("Server module loaded successfully!")
+print("=" * 60)
 
 
 @app.route('/', methods=['GET'])

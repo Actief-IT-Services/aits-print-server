@@ -11,6 +11,7 @@ import webbrowser
 import socket
 import tempfile
 import logging
+import traceback
 
 # Setup basic logging first
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -171,11 +172,23 @@ class PrintServerTray:
         try:
             def run_server():
                 try:
+                    logger.info("=" * 60)
                     logger.info("Starting full server from server.py...")
+                    logger.info("=" * 60)
+                    
+                    # Change to base directory so imports work
+                    os.chdir(str(self.base_dir))
+                    logger.info(f"Working directory: {os.getcwd()}")
+                    
+                    # Add base_dir to Python path
+                    if str(self.base_dir) not in sys.path:
+                        sys.path.insert(0, str(self.base_dir))
                     
                     # Import the full server module
                     # This will set up logging, load config, etc.
+                    logger.info("Importing server module...")
                     import server
+                    logger.info("Server module imported successfully")
                     
                     # Get the Flask app and config from server module
                     self.flask_app = server.app
@@ -197,7 +210,10 @@ class PrintServerTray:
                     serve(self.flask_app, host=host, port=port, _quiet=False)
                     
                 except Exception as e:
-                    logger.error(f"Server error: {e}", exc_info=True)
+                    logger.error(f"Server error: {e}")
+                    logger.error(traceback.format_exc())
+                    print(f"SERVER ERROR: {e}")
+                    print(traceback.format_exc())
                     self.server_running = False
             
             self.server_thread = threading.Thread(target=run_server, daemon=True)
@@ -213,7 +229,8 @@ class PrintServerTray:
                 logger.error("Server thread died unexpectedly")
                 
         except Exception as e:
-            logger.error(f"Error starting server: {e}", exc_info=True)
+            logger.error(f"Error starting server: {e}")
+            logger.error(traceback.format_exc())
     
     def stop_server(self):
         """Stop the print server"""
