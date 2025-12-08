@@ -596,44 +596,199 @@ class PrinterManager:
     
     def _print_win32(self, printer_name: str, document: str, document_name: str,
                      copies: int, options: dict) -> bool:
-        """Print using Win32"""
+        """Print using Win32 - tries multiple methods"""
         try:
-            import win32api
+            # Decode base64 document
+            document_data = base64.b64decode(document)
             
-            # Create temporary file from base64 data
-            temp_file = None
+            # Create temporary file
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+            temp_file.write(document_data)
+            temp_file.close()
+            temp_path = temp_file.name
+            
+            logger.info(f"Created temp file: {temp_path} ({len(document_data)} bytes)")
+            
+            # Try multiple print methods
+            success = False
+            
+            # Method 1: Try using SumatraPDF (common silent PDF printer)
             try:
-                # Decode base64 document
-                document_data = base64.b64decode(document)
+                import subprocess
+                sumatra_paths = [
+                    r"C:\Program Files\SumatraPDF\SumatraPDF.exe",
+                    r"C:\Program Files (x86)\SumatraPDF\SumatraPDF.exe",
+                    os.path.expandvars(r"%LOCALAPPDATA%\SumatraPDF\SumatraPDF.exe"),
+                ]
                 
-                # Create temporary file
-                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-                temp_file.write(document_data)
-                temp_file.close()
+                sumatra_exe = None
+                for path in sumatra_paths:
+                    if os.path.exists(path):
+                        sumatra_exe = path
+                        break
                 
-                # Print the file
-                # Note: This uses the default application for PDF files
-                # For more control, you'd need to use win32print.StartDocPrinter
+                if sumatra_exe:
+                    logger.info(f"Using SumatraPDF: {sumatra_exe}")
+                    for _ in range(copies):
+                        result = subprocess.run([
+                            sumatra_exe,
+                            "-print-to", printer_name,
+                            "-silent",
+                            temp_path
+                        ], capture_output=True, timeout=60)
+                        
+                        if result.returncode == 0:
+                            success = True
+                        else:
+                            logger.warning(f"SumatraPDF returned: {result.returncode}")
+                    
+                    if success:
+                        logger.info(f"Printed via SumatraPDF to {printer_name}")
+                        return True
+            except Exception as e:
+                logger.debug(f"SumatraPDF method failed: {e}")
+            
+            # Method 2: Try using Foxit Reader
+            try:
+                import subprocess
+                foxit_paths = [
+                    r"C:\Program Files\Foxit Software\Foxit PDF Reader\FoxitPDFReader.exe",
+                    r"C:\Program Files (x86)\Foxit Software\Foxit PDF Reader\FoxitPDFReader.exe",
+                    r"C:\Program Files\Foxit Software\Foxit Reader\FoxitReader.exe",
+                    r"C:\Program Files (x86)\Foxit Software\Foxit Reader\FoxitReader.exe",
+                ]
+                
+                foxit_exe = None
+                for path in foxit_paths:
+                    if os.path.exists(path):
+                        foxit_exe = path
+                        break
+                
+                if foxit_exe:
+                    logger.info(f"Using Foxit Reader: {foxit_exe}")
+                    for _ in range(copies):
+                        result = subprocess.run([
+                            foxit_exe,
+                            "/t", temp_path, printer_name
+                        ], capture_output=True, timeout=60)
+                    
+                    success = True
+                    logger.info(f"Printed via Foxit Reader to {printer_name}")
+                    return True
+            except Exception as e:
+                logger.debug(f"Foxit Reader method failed: {e}")
+            
+            # Method 3: Try using Adobe Reader
+            try:
+                import subprocess
+                import time
+                adobe_paths = [
+                    r"C:\Program Files\Adobe\Acrobat Reader DC\Reader\AcroRd32.exe",
+                    r"C:\Program Files (x86)\Adobe\Acrobat Reader DC\Reader\AcroRd32.exe",
+                    r"C:\Program Files\Adobe\Reader 11.0\Reader\AcroRd32.exe",
+                    r"C:\Program Files (x86)\Adobe\Reader 11.0\Reader\AcroRd32.exe",
+                    r"C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe",
+                    r"C:\Program Files (x86)\Adobe\Acrobat DC\Acrobat\Acrobat.exe",
+                ]
+                
+                adobe_exe = None
+                for path in adobe_paths:
+                    if os.path.exists(path):
+                        adobe_exe = path
+                        break
+                
+                if adobe_exe:
+                    logger.info(f"Using Adobe Reader: {adobe_exe}")
+                    for _ in range(copies):
+                        # /t = print to printer and exit, /h = start minimized
+                        result = subprocess.run([
+                            adobe_exe,
+                            "/t", temp_path, printer_name,
+                            "/h"
+                        ], capture_output=True, timeout=120, shell=False)
+                    
+                    # Give Adobe some time to spool
+                    time.sleep(3)
+                    success = True
+                    logger.info(f"Printed via Adobe Reader to {printer_name}")
+                    return True
+            except subprocess.TimeoutExpired:
+                logger.warning("Adobe Reader print timed out")
+            except Exception as e:
+                logger.debug(f"Adobe Reader method failed: {e}")
+            
+            # Method 4: Try using win32print directly (RAW printing - for PCL/PostScript printers)
+            try:
+                import win32print
+                import win32con
+                
+                # This sends RAW PDF data - works on printers with PDF support
+                hprinter = win32print.OpenPrinter(printer_name)
+                try:
+                    job_info = win32print.StartDocPrinter(hprinter, 1, (document_name, None, "RAW"))
+                    try:
+                        win32print.StartPagePrinter(hprinter)
+                        for _ in range(copies):
+                            win32print.WritePrinter(hprinter, document_data)
+                        win32print.EndPagePrinter(hprinter)
+                    finally:
+                        win32print.EndDocPrinter(hprinter)
+                    success = True
+                    logger.info(f"Printed via win32print RAW to {printer_name}")
+                    return True
+                finally:
+                    win32print.ClosePrinter(hprinter)
+            except Exception as e:
+                logger.debug(f"win32print RAW method failed: {e}")
+            
+            # Method 5: Fallback to ShellExecute (original method)
+            try:
+                import win32api
+                
+                logger.info(f"Trying ShellExecute print to {printer_name}")
                 win32api.ShellExecute(
                     0,
                     "print",
-                    temp_file.name,
+                    temp_path,
                     f'/d:"{printer_name}"',
                     ".",
                     0
                 )
                 
-                logger.info(f"Win32 print job submitted to {printer_name}")
+                logger.info(f"Win32 ShellExecute print job submitted to {printer_name}")
                 return True
                 
-            finally:
-                # Note: Don't delete immediately on Windows as print spooler may still need it
-                # Consider using a cleanup job to delete old temp files
-                pass
+            except Exception as e:
+                logger.error(f"ShellExecute print error: {e}")
+            
+            # If all methods failed
+            if not success:
+                logger.error(f"All print methods failed for printer: {printer_name}")
+                logger.error("Please install SumatraPDF for reliable PDF printing: https://www.sumatrapdfreader.org/")
+                return False
+            
+            return success
                 
         except Exception as e:
             logger.error(f"Win32 print error: {e}", exc_info=True)
             return False
+        finally:
+            # Schedule temp file cleanup after some time to let spooler finish
+            if 'temp_path' in locals():
+                try:
+                    import threading
+                    def cleanup_temp():
+                        import time
+                        time.sleep(60)  # Wait 60 seconds for print spooler
+                        try:
+                            if os.path.exists(temp_path):
+                                os.unlink(temp_path)
+                                logger.debug(f"Cleaned up temp file: {temp_path}")
+                        except Exception:
+                            pass
+                    threading.Thread(target=cleanup_temp, daemon=True).start()
+                except Exception:
+                    pass
     
     def _parse_printer_state_cups(self, state: int) -> str:
         """Parse CUPS printer state"""
