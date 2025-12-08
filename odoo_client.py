@@ -11,10 +11,28 @@ import time
 import base64
 import tempfile
 import os
+import sys
+import platform
 from typing import Optional, Dict, List
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Windows SSL certificate fix
+def get_ssl_cert_path():
+    """Get the SSL certificate bundle path, with Windows fix"""
+    if platform.system() == 'Windows':
+        # Check if running as PyInstaller bundle
+        if getattr(sys, 'frozen', False):
+            # Try to use certifi if available
+            try:
+                import certifi
+                return certifi.where()
+            except ImportError:
+                pass
+            # Fallback to Windows cert store (by returning True, requests uses Windows certs)
+            return True
+    return None  # Use default
 
 
 class OdooClient:
@@ -41,11 +59,22 @@ class OdooClient:
         self.api_key = self.config.get('api_key', '')
         self.server_id = self.config.get('server_id')  # Print server ID in Odoo
         
-        # Session
+        # Session with SSL handling for Windows
         self.session = requests.Session()
         self.session.headers.update({
             'Content-Type': 'application/json',
         })
+        
+        # Configure SSL verification
+        ssl_cert = get_ssl_cert_path()
+        if ssl_cert is not None:
+            self.session.verify = ssl_cert
+            logger.debug(f"SSL verification configured: {ssl_cert}")
+        
+        # Log platform info for debugging
+        logger.info(f"Platform: {platform.system()} {platform.release()}")
+        logger.info(f"Python: {sys.version}")
+        logger.info(f"Frozen (PyInstaller): {getattr(sys, 'frozen', False)}")
         
         if not self.enabled:
             logger.info("Odoo polling disabled in config")
@@ -137,6 +166,13 @@ class OdooClient:
             'X-Server-Name': server_name,
         }
         
+        # Extended debug logging
+        logger.debug(f"=== Making {method} request ===")
+        logger.debug(f"  URL: {url}")
+        logger.debug(f"  Database: {self.database}")
+        logger.debug(f"  API Key: {self.api_key[:8]}..." if self.api_key else "  API Key: (not set)")
+        logger.debug(f"  Server Name: {server_name}")
+        
         try:
             if method == 'GET':
                 response = self.session.get(url, headers=headers, timeout=30)
@@ -145,26 +181,60 @@ class OdooClient:
             else:
                 raise ValueError(f"Unsupported method: {method}")
             
+            # Log response details
+            logger.debug(f"  Response Status: {response.status_code}")
+            logger.debug(f"  Response Headers: {dict(response.headers)}")
+            content_type = response.headers.get('Content-Type', '')
+            logger.debug(f"  Content-Type: {content_type}")
+            
+            # Check if response is HTML instead of JSON
+            if 'text/html' in content_type:
+                logger.error(f"  ERROR: Received HTML instead of JSON!")
+                logger.error(f"  Response preview: {response.text[:500]}...")
+                logger.error(f"  This usually means:")
+                logger.error(f"    1. The URL is wrong or redirecting to a login page")
+                logger.error(f"    2. The aits_direct_print module is not installed in Odoo")
+                logger.error(f"    3. There's a proxy/firewall intercepting the request")
+                return None
+            
             if response.status_code == 200:
-                return response.json()
+                try:
+                    json_response = response.json()
+                    logger.debug(f"  JSON Response: {json_response}")
+                    return json_response
+                except Exception as json_err:
+                    logger.error(f"  Failed to parse JSON: {json_err}")
+                    logger.error(f"  Raw response: {response.text[:500]}")
+                    return None
             elif response.status_code == 401:
                 logger.error("Odoo authentication failed - check API key")
                 return None
             elif response.status_code == 404:
-                logger.debug(f"Endpoint not found: {endpoint}")
+                logger.warning(f"Endpoint not found: {endpoint}")
+                logger.warning(f"  Full URL was: {url}")
+                logger.warning(f"  Response: {response.text[:200]}")
                 return None
             else:
-                logger.warning(f"Odoo request failed: {response.status_code} - {response.text}")
+                logger.warning(f"Odoo request failed: {response.status_code}")
+                logger.warning(f"  Response: {response.text[:500]}")
                 return None
                 
-        except requests.exceptions.ConnectionError:
+        except requests.exceptions.SSLError as e:
+            logger.error(f"SSL Error connecting to Odoo: {e}")
+            logger.error(f"  This may be a certificate issue on Windows")
+            logger.error(f"  Try setting verify=False or updating certifi package")
+            return None
+        except requests.exceptions.ConnectionError as e:
             logger.warning(f"Cannot connect to Odoo at {self.odoo_url}")
+            logger.warning(f"  Connection error: {e}")
             return None
         except requests.exceptions.Timeout:
             logger.warning("Odoo request timed out")
             return None
         except Exception as e:
-            logger.error(f"Odoo request error: {e}")
+            logger.error(f"Odoo request error: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"  Traceback: {traceback.format_exc()}")
             return None
     
     def _check_and_process_jobs(self):

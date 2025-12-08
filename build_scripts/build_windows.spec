@@ -37,6 +37,7 @@ a = Analysis(
         'queue',
         'requests',
         'cryptography',
+        'certifi',
     ],
     hookspath=[],
     hooksconfig={},

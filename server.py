@@ -386,6 +386,12 @@ def test_odoo_connection():
     api_key = data.get('api_key', config.get('odoo', {}).get('api_key', ''))
     database = data.get('database', config.get('odoo', {}).get('database', ''))
     
+    # Extended logging for debugging
+    logger.info(f"=== Testing Odoo Connection ===")
+    logger.info(f"  URL: {odoo_url}")
+    logger.info(f"  Database: {database}")
+    logger.info(f"  API Key: {api_key[:8]}..." if api_key else "  API Key: (not set)")
+    
     if not odoo_url:
         return jsonify({'success': False, 'error': 'Odoo URL is required'}), 400
     
@@ -398,25 +404,62 @@ def test_odoo_connection():
         }
         
         test_url = f"{odoo_url.rstrip('/')}/api/v1/print/ping"
+        logger.info(f"  Full test URL: {test_url}")
+        
         response = requests_lib.get(test_url, headers=headers, timeout=10)
         
-        if response.status_code == 200:
+        # Log response details
+        logger.info(f"  Response Status: {response.status_code}")
+        logger.info(f"  Response Headers: {dict(response.headers)}")
+        content_type = response.headers.get('Content-Type', '')
+        logger.info(f"  Content-Type: {content_type}")
+        
+        # Check if we got HTML instead of JSON
+        if 'text/html' in content_type:
+            error_msg = 'Received HTML instead of JSON - check URL and ensure aits_direct_print module is installed'
+            logger.error(f"  ERROR: {error_msg}")
+            logger.error(f"  Response preview: {response.text[:500]}")
             return jsonify({
-                'success': True,
-                'message': 'Connection successful',
-                'odoo_version': response.json().get('version', 'unknown')
-            })
+                'success': False,
+                'error': error_msg,
+                'debug': {
+                    'content_type': content_type,
+                    'status_code': response.status_code,
+                    'response_preview': response.text[:200]
+                }
+            }), 400
+        
+        if response.status_code == 200:
+            try:
+                json_data = response.json()
+                logger.info(f"  JSON Response: {json_data}")
+                return jsonify({
+                    'success': True,
+                    'message': 'Connection successful',
+                    'odoo_version': json_data.get('version', 'unknown')
+                })
+            except Exception as json_err:
+                error_msg = f'Failed to parse JSON response: {json_err}'
+                logger.error(f"  {error_msg}")
+                logger.error(f"  Raw response: {response.text[:500]}")
+                return jsonify({
+                    'success': False,
+                    'error': error_msg,
+                    'debug': {'raw_response': response.text[:200]}
+                }), 400
         elif response.status_code == 401:
             return jsonify({
                 'success': False,
                 'error': 'Authentication failed - check API key'
             }), 401
         elif response.status_code == 404:
+            logger.warning(f"  404 Response: {response.text[:200]}")
             return jsonify({
                 'success': False,
                 'error': 'Odoo Direct Print module not installed or API endpoint not found'
             }), 404
         else:
+            logger.warning(f"  Unexpected response: {response.text[:500]}")
             return jsonify({
                 'success': False,
                 'error': f'Connection failed with status {response.status_code}'
