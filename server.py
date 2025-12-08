@@ -8,6 +8,7 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+import platform
 import requests as requests_lib  # For making HTTP requests to Odoo
 
 from flask import Flask, request, jsonify, send_from_directory
@@ -18,25 +19,80 @@ from printer_manager import PrinterManager
 from job_queue import JobQueue
 from auth import require_api_key, init_auth
 
+
+def get_data_dir():
+    """Get the appropriate data directory for the platform"""
+    if platform.system() == 'Windows':
+        # Use LOCALAPPDATA on Windows (writable even from Program Files)
+        app_data = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+        data_dir = Path(app_data) / 'AITS Print Server'
+    else:
+        # Use home directory on Linux/Mac
+        data_dir = Path.home() / '.aits_print_server'
+    
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+
+def get_config_path():
+    """Get config file path - check multiple locations"""
+    # First check next to the executable/script
+    base_dir = Path(__file__).parent
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle
+        base_dir = Path(sys.executable).parent
+    
+    config_locations = [
+        base_dir / 'config.yaml',
+        get_data_dir() / 'config.yaml',
+        Path.home() / '.aits_print_server' / 'config.yaml',
+    ]
+    
+    for config_path in config_locations:
+        if config_path.exists():
+            return config_path
+    
+    # Return first location for error message
+    return config_locations[0]
+
+
 # Get base directory
-BASE_DIR = Path(__file__).parent
+if getattr(sys, 'frozen', False):
+    # Running as PyInstaller bundle
+    BASE_DIR = Path(sys.executable).parent
+else:
+    BASE_DIR = Path(__file__).parent
+
+# Get data directory for logs, etc.
+DATA_DIR = get_data_dir()
 
 # Initialize Flask app
 app = Flask(__name__, static_folder=str(BASE_DIR / 'static'))
 CORS(app)
 
 # Load configuration
-config_path = Path(__file__).parent / 'config.yaml'
+config_path = get_config_path()
 if not config_path.exists():
-    print("Error: config.yaml not found. Copy config.example.yaml to config.yaml")
+    print(f"Error: config.yaml not found at {config_path}")
+    print(f"Please copy config.yaml.example to {config_path}")
     sys.exit(1)
+
+print(f"Loading config from: {config_path}")
 
 with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
 
-# Setup logging
-log_dir = Path(__file__).parent / 'logs'
-log_dir.mkdir(exist_ok=True)
+# Setup logging - use DATA_DIR for logs (writable location)
+log_dir = DATA_DIR / 'logs'
+try:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Log directory: {log_dir}")
+except PermissionError:
+    # Fallback to temp directory
+    import tempfile
+    log_dir = Path(tempfile.gettempdir()) / 'aits_print_server' / 'logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Using fallback log directory: {log_dir}")
 
 log_file = log_dir / Path(config['logging']['file']).name
 log_max_bytes = config['logging'].get('max_bytes', 10485760)  # Default 10MB
@@ -373,6 +429,48 @@ def get_config():
         }
     }
     return jsonify(safe_config)
+
+
+@app.route('/api/debug', methods=['GET'])
+@app.route('/api/v1/debug', methods=['GET'])
+def get_debug_info():
+    """Get debug information including paths and system info"""
+    import platform
+    
+    debug_info = {
+        'platform': {
+            'system': platform.system(),
+            'release': platform.release(),
+            'version': platform.version(),
+            'machine': platform.machine(),
+            'python_version': sys.version,
+        },
+        'paths': {
+            'base_dir': str(BASE_DIR),
+            'data_dir': str(DATA_DIR),
+            'log_dir': str(log_dir),
+            'log_file': str(log_file),
+            'config_file': str(config_path),
+            'frozen': getattr(sys, 'frozen', False),
+            'executable': sys.executable,
+        },
+        'logs': {
+            'exists': log_dir.exists(),
+            'writable': os.access(log_dir, os.W_OK) if log_dir.exists() else False,
+            'log_file_exists': log_file.exists() if log_file else False,
+        }
+    }
+    
+    # Try to get recent log entries
+    try:
+        if log_file.exists():
+            with open(log_file, 'r') as f:
+                lines = f.readlines()
+                debug_info['recent_logs'] = lines[-50:] if len(lines) > 50 else lines
+    except Exception as e:
+        debug_info['log_read_error'] = str(e)
+    
+    return jsonify(debug_info)
 
 
 @app.route('/api/odoo/test', methods=['POST'])
