@@ -3,8 +3,8 @@
 
 !define PRODUCT_NAME "AITS Print Server"
 !define PRODUCT_VERSION "1.0.0"
-!define PRODUCT_PUBLISHER "AITS"
-!define PRODUCT_WEB_SITE "http://www.aits.com"
+!define PRODUCT_PUBLISHER "Actief IT Services"
+!define PRODUCT_WEB_SITE "https://www.intevi.nl"
 !define PRODUCT_DIR_REGKEY "Software\Microsoft\Windows\CurrentVersion\App Paths\AITS_Print_Server.exe"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
