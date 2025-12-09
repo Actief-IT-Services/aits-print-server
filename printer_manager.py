@@ -2,6 +2,7 @@
 Supports CUPS (Linux) and Win32 (Windows)
 """
 
+import os
 import sys
 import logging
 import subprocess
@@ -825,3 +826,375 @@ class PrinterManager:
             return 'printing'
         else:
             return 'unknown'
+
+    # ============== Printer Management Methods ==============
+    # These methods allow remote management of printers
+
+    def discover_printers(self) -> List[Dict]:
+        """Discover/refresh available printers - same as get_printers but forces refresh"""
+        # Re-initialize the backend to refresh the connection
+        if self.platform.startswith('linux'):
+            self._init_cups()
+        elif self.platform == 'win32':
+            self._init_win32()
+        
+        return self.get_printers()
+
+    def add_printer(self, name: str, uri: str, driver: str = 'everywhere',
+                    description: str = '', location: str = '', 
+                    options: dict = None) -> Dict:
+        """Add a new printer to CUPS (Linux only)
+        
+        Args:
+            name: Printer name (no spaces)
+            uri: Device URI (e.g., ipp://192.168.1.100/ipp/print, socket://192.168.1.100:9100)
+            driver: PPD driver or 'everywhere' for driverless IPP
+            description: Human-readable description
+            location: Physical location
+            options: Additional CUPS options
+        """
+        if not self.platform.startswith('linux'):
+            return {
+                'success': False,
+                'error': 'Adding printers is only supported on Linux with CUPS'
+            }
+        
+        try:
+            # Sanitize printer name (CUPS doesn't allow spaces)
+            safe_name = name.replace(' ', '_').replace('/', '_')
+            
+            if self.cups_conn:
+                # Use CUPS API directly
+                import cups
+                
+                # For IPP Everywhere (driverless) printers
+                if driver == 'everywhere' or driver == 'driverless':
+                    # Use lpadmin command for driverless printers
+                    cmd = [
+                        'lpadmin',
+                        '-p', safe_name,
+                        '-v', uri,
+                        '-m', 'everywhere',
+                        '-E'  # Enable printer
+                    ]
+                    if description:
+                        cmd.extend(['-D', description])
+                    if location:
+                        cmd.extend(['-L', location])
+                    
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                    
+                    if result.returncode != 0:
+                        return {
+                            'success': False,
+                            'error': f'lpadmin failed: {result.stderr}'
+                        }
+                else:
+                    # Use specific PPD file
+                    self.cups_conn.addPrinter(
+                        safe_name,
+                        device=uri,
+                        ppdname=driver,
+                        info=description,
+                        location=location
+                    )
+                    self.cups_conn.enablePrinter(safe_name)
+                    self.cups_conn.acceptJobs(safe_name)
+                
+                logger.info(f"Added printer '{safe_name}' with URI '{uri}'")
+                return {
+                    'success': True,
+                    'printer_name': safe_name,
+                    'message': f'Printer {safe_name} added successfully'
+                }
+            else:
+                # Fallback to lpadmin command
+                cmd = ['lpadmin', '-p', safe_name, '-v', uri, '-E']
+                if driver and driver != 'everywhere':
+                    cmd.extend(['-m', driver])
+                else:
+                    cmd.extend(['-m', 'everywhere'])
+                if description:
+                    cmd.extend(['-D', description])
+                if location:
+                    cmd.extend(['-L', location])
+                
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                
+                if result.returncode == 0:
+                    return {
+                        'success': True,
+                        'printer_name': safe_name,
+                        'message': f'Printer {safe_name} added successfully'
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'error': f'lpadmin failed: {result.stderr}'
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Error adding printer: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def remove_printer(self, printer_name: str) -> Dict:
+        """Remove a printer from the system"""
+        if self.platform.startswith('linux'):
+            return self._remove_printer_cups(printer_name)
+        elif self.platform == 'win32':
+            return self._remove_printer_win32(printer_name)
+        else:
+            return {
+                'success': False,
+                'error': f'Unsupported platform: {self.platform}'
+            }
+
+    def _remove_printer_cups(self, printer_name: str) -> Dict:
+        """Remove a printer from CUPS"""
+        try:
+            if self.cups_conn:
+                self.cups_conn.deletePrinter(printer_name)
+            else:
+                result = subprocess.run(
+                    ['lpadmin', '-x', printer_name],
+                    capture_output=True, text=True, timeout=30
+                )
+                if result.returncode != 0:
+                    return {
+                        'success': False,
+                        'error': f'Failed to remove printer: {result.stderr}'
+                    }
+            
+            logger.info(f"Removed printer: {printer_name}")
+            return {
+                'success': True,
+                'message': f'Printer {printer_name} removed successfully'
+            }
+        except Exception as e:
+            logger.error(f"Error removing printer: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def _remove_printer_win32(self, printer_name: str) -> Dict:
+        """Remove a printer from Windows"""
+        try:
+            result = subprocess.run(
+                ['rundll32', 'printui.dll,PrintUIEntry', '/dl', '/n', printer_name],
+                capture_output=True, text=True, timeout=30
+            )
+            
+            # Note: rundll32 may not return error codes properly
+            logger.info(f"Attempted to remove printer: {printer_name}")
+            return {
+                'success': True,
+                'message': f'Printer {printer_name} removal initiated'
+            }
+        except Exception as e:
+            logger.error(f"Error removing printer: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def set_default_printer(self, printer_name: str) -> Dict:
+        """Set a printer as the default"""
+        try:
+            if self.platform.startswith('linux'):
+                if self.cups_conn:
+                    self.cups_conn.setDefault(printer_name)
+                else:
+                    result = subprocess.run(
+                        ['lpoptions', '-d', printer_name],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    if result.returncode != 0:
+                        return {
+                            'success': False,
+                            'error': f'Failed to set default: {result.stderr}'
+                        }
+            elif self.platform == 'win32':
+                result = subprocess.run(
+                    ['rundll32', 'printui.dll,PrintUIEntry', '/y', '/n', printer_name],
+                    capture_output=True, text=True, timeout=30
+                )
+            
+            logger.info(f"Set default printer: {printer_name}")
+            return {
+                'success': True,
+                'message': f'Default printer set to {printer_name}'
+            }
+        except Exception as e:
+            logger.error(f"Error setting default printer: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def enable_printer(self, printer_name: str, enabled: bool = True) -> Dict:
+        """Enable or disable a printer"""
+        try:
+            if self.platform.startswith('linux'):
+                if self.cups_conn:
+                    if enabled:
+                        self.cups_conn.enablePrinter(printer_name)
+                        self.cups_conn.acceptJobs(printer_name)
+                    else:
+                        self.cups_conn.disablePrinter(printer_name)
+                        self.cups_conn.rejectJobs(printer_name)
+                else:
+                    if enabled:
+                        subprocess.run(['cupsenable', printer_name], timeout=30)
+                        subprocess.run(['cupsaccept', printer_name], timeout=30)
+                    else:
+                        subprocess.run(['cupsdisable', printer_name], timeout=30)
+                        subprocess.run(['cupsreject', printer_name], timeout=30)
+                
+                action = 'enabled' if enabled else 'disabled'
+                logger.info(f"Printer {printer_name} {action}")
+                return {
+                    'success': True,
+                    'message': f'Printer {printer_name} {action}'
+                }
+            elif self.platform == 'win32':
+                # Windows doesn't have a simple enable/disable
+                # Would need to use WMI or modify printer properties
+                return {
+                    'success': False,
+                    'error': 'Enable/disable not supported on Windows via this API'
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f'Unsupported platform: {self.platform}'
+                }
+        except Exception as e:
+            logger.error(f"Error enabling/disabling printer: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def print_test_page(self, printer_name: str) -> Dict:
+        """Print a test page to the specified printer"""
+        try:
+            # Create a simple test page
+            test_content = f"""
+╔══════════════════════════════════════════════════════════════╗
+║               AITS PRINT SERVER - TEST PAGE                  ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  Printer: {printer_name:<48} ║
+║  Server:  AITS Print Server                                  ║
+║  Date:    {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<48} ║
+║                                                              ║
+║  If you can read this, the printer is working correctly!     ║
+║                                                              ║
+╠══════════════════════════════════════════════════════════════╣
+║             https://www.actief-it.be                         ║
+╚══════════════════════════════════════════════════════════════╝
+"""
+            
+            if self.platform.startswith('linux'):
+                # Use lp command
+                process = subprocess.Popen(
+                    ['lp', '-d', printer_name],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                stdout, stderr = process.communicate(input=test_content.encode(), timeout=30)
+                
+                if process.returncode == 0:
+                    logger.info(f"Test page sent to {printer_name}")
+                    return {
+                        'success': True,
+                        'message': f'Test page sent to {printer_name}'
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'error': f'Failed to print test page: {stderr.decode()}'
+                    }
+            elif self.platform == 'win32':
+                # Create temp file and print
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+                    f.write(test_content)
+                    temp_path = f.name
+                
+                try:
+                    import win32api
+                    win32api.ShellExecute(0, "print", temp_path, f'/d:"{printer_name}"', ".", 0)
+                    logger.info(f"Test page sent to {printer_name}")
+                    return {
+                        'success': True,
+                        'message': f'Test page sent to {printer_name}'
+                    }
+                finally:
+                    # Schedule cleanup
+                    import threading
+                    def cleanup():
+                        import time
+                        time.sleep(30)
+                        try:
+                            import os
+                            os.unlink(temp_path)
+                        except:
+                            pass
+                    threading.Thread(target=cleanup, daemon=True).start()
+            else:
+                return {
+                    'success': False,
+                    'error': f'Unsupported platform: {self.platform}'
+                }
+        except Exception as e:
+            logger.error(f"Error printing test page: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def get_cups_status(self) -> Dict:
+        """Get CUPS server status (Linux only)"""
+        if not self.platform.startswith('linux'):
+            return {
+                'available': False,
+                'error': 'CUPS is only available on Linux'
+            }
+        
+        try:
+            # Check if CUPS service is running
+            result = subprocess.run(
+                ['systemctl', 'is-active', 'cups'],
+                capture_output=True, text=True, timeout=10
+            )
+            cups_active = result.stdout.strip() == 'active'
+            
+            # Get CUPS version
+            version_result = subprocess.run(
+                ['cupsd', '-V'],
+                capture_output=True, text=True, timeout=10
+            )
+            version = version_result.stderr.strip() if version_result.stderr else 'Unknown'
+            
+            # Count printers
+            printers = self.get_printers()
+            
+            return {
+                'available': True,
+                'service_running': cups_active,
+                'version': version,
+                'printer_count': len(printers),
+                'backend_connected': self.cups_conn is not None
+            }
+        except Exception as e:
+            logger.error(f"Error getting CUPS status: {e}")
+            return {
+                'available': False,
+                'error': str(e)
+            }

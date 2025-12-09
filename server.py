@@ -358,6 +358,190 @@ def get_printer_options(printer_name):
         }), 500
 
 
+# ============== Printer Management Endpoints ==============
+# These endpoints allow remote management of printers on the print server
+
+@app.route('/api/v1/printers/discover', methods=['POST'])
+@require_api_key
+def discover_printers():
+    """Discover/refresh available printers on the system"""
+    try:
+        printers = printer_manager.discover_printers()
+        logger.info(f"Discovered {len(printers)} printers")
+        return jsonify({
+            'success': True,
+            'printers': printers,
+            'count': len(printers)
+        })
+    except Exception as e:
+        logger.error(f"Error discovering printers: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/v1/printers/add', methods=['POST'])
+@require_api_key
+def add_printer():
+    """Add a new printer to CUPS (Linux only)"""
+    try:
+        data = request.get_json()
+        
+        required_fields = ['name', 'uri']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }), 400
+        
+        result = printer_manager.add_printer(
+            name=data['name'],
+            uri=data['uri'],
+            driver=data.get('driver', 'everywhere'),  # IPP Everywhere driver
+            description=data.get('description', ''),
+            location=data.get('location', ''),
+            options=data.get('options', {})
+        )
+        
+        if result.get('success'):
+            logger.info(f"Added printer: {data['name']}")
+            return jsonify(result), 201
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        logger.error(f"Error adding printer: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/v1/printers/<printer_name>/remove', methods=['DELETE'])
+@require_api_key
+def remove_printer(printer_name):
+    """Remove a printer from the system (Linux only)"""
+    try:
+        result = printer_manager.remove_printer(printer_name)
+        
+        if result.get('success'):
+            logger.info(f"Removed printer: {printer_name}")
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        logger.error(f"Error removing printer: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/v1/printers/<printer_name>/set-default', methods=['POST'])
+@require_api_key
+def set_default_printer(printer_name):
+    """Set a printer as the default"""
+    try:
+        result = printer_manager.set_default_printer(printer_name)
+        
+        if result.get('success'):
+            logger.info(f"Set default printer: {printer_name}")
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        logger.error(f"Error setting default printer: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/v1/printers/<printer_name>/enable', methods=['POST'])
+@require_api_key
+def enable_printer(printer_name):
+    """Enable a printer (accept jobs)"""
+    try:
+        result = printer_manager.enable_printer(printer_name, enabled=True)
+        
+        if result.get('success'):
+            logger.info(f"Enabled printer: {printer_name}")
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        logger.error(f"Error enabling printer: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/v1/printers/<printer_name>/disable', methods=['POST'])
+@require_api_key
+def disable_printer(printer_name):
+    """Disable a printer (reject jobs)"""
+    try:
+        result = printer_manager.enable_printer(printer_name, enabled=False)
+        
+        if result.get('success'):
+            logger.info(f"Disabled printer: {printer_name}")
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        logger.error(f"Error disabling printer: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/v1/printers/<printer_name>/test', methods=['POST'])
+@require_api_key
+def test_printer(printer_name):
+    """Print a test page to the specified printer"""
+    try:
+        result = printer_manager.print_test_page(printer_name)
+        
+        if result.get('success'):
+            logger.info(f"Test page sent to printer: {printer_name}")
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        logger.error(f"Error printing test page: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/v1/system/cups-status', methods=['GET'])
+@require_api_key
+def get_cups_status():
+    """Get CUPS server status (Linux only)"""
+    try:
+        status = printer_manager.get_cups_status()
+        return jsonify({
+            'success': True,
+            'cups': status
+        })
+    except Exception as e:
+        logger.error(f"Error getting CUPS status: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/print', methods=['POST'])
 @app.route('/api/v1/print', methods=['POST'])
 @require_api_key
