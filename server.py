@@ -238,6 +238,81 @@ except Exception as e:
     print(f"Failed to initialize Odoo client: {e}")
     traceback.print_exc()
 
+
+def initialize_printers_from_config():
+    """Initialize printers defined in config.yaml (Linux/CUPS only)"""
+    printers_config = config.get('printers', [])
+    
+    if not printers_config:
+        logger.debug("No printers defined in config")
+        return
+    
+    if not printer_manager or not printer_manager.platform.startswith('linux'):
+        logger.info("Printer auto-configuration is only supported on Linux with CUPS")
+        return
+    
+    logger.info(f"Initializing {len(printers_config)} printer(s) from config...")
+    
+    # Get existing printers to avoid duplicates
+    existing_printers = {p['name'] for p in printer_manager.get_printers()}
+    
+    for printer_cfg in printers_config:
+        name = printer_cfg.get('name')
+        if not name:
+            logger.warning("Printer config missing 'name', skipping")
+            continue
+        
+        # Sanitize name
+        safe_name = name.replace(' ', '_').replace('/', '_')
+        
+        if safe_name in existing_printers:
+            logger.info(f"Printer '{safe_name}' already exists, skipping")
+            continue
+        
+        uri = printer_cfg.get('uri')
+        if not uri:
+            logger.warning(f"Printer '{name}' missing 'uri', skipping")
+            continue
+        
+        driver = printer_cfg.get('driver', 'everywhere')
+        description = printer_cfg.get('description', '')
+        location = printer_cfg.get('location', '')
+        is_default = printer_cfg.get('default', False)
+        
+        try:
+            result = printer_manager.add_printer(
+                name=safe_name,
+                uri=uri,
+                driver=driver,
+                description=description,
+                location=location
+            )
+            
+            if result.get('success'):
+                logger.info(f"✓ Added printer '{safe_name}' ({uri})")
+                
+                # Set as default if requested
+                if is_default:
+                    try:
+                        printer_manager.set_default_printer(safe_name)
+                        logger.info(f"  Set '{safe_name}' as default printer")
+                    except Exception as e:
+                        logger.warning(f"  Could not set as default: {e}")
+            else:
+                logger.warning(f"✗ Failed to add printer '{safe_name}': {result.get('error')}")
+                
+        except Exception as e:
+            logger.warning(f"✗ Error adding printer '{safe_name}': {e}")
+
+
+# Initialize printers from config on startup
+try:
+    initialize_printers_from_config()
+    print("✓ Printers initialized from config")
+except Exception as e:
+    print(f"Warning: Could not initialize printers from config: {e}")
+    logger.warning(f"Could not initialize printers from config: {e}")
+
 print("=" * 60)
 print("Server module loaded successfully!")
 print("=" * 60)

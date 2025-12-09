@@ -15,6 +15,36 @@ printer:
   retry_delay: 5
   job_retention_days: 7
 
+# Define printers to be auto-configured on server startup (Linux/CUPS only)
+# These printers will be added to CUPS if they don't already exist
+printers:
+  # Example: Network printer via IPP (AirPrint/driverless)
+  # - name: Office_Printer
+  #   uri: ipp://192.168.1.100/ipp/print
+  #   driver: everywhere  # Use 'everywhere' for driverless IPP printers
+  #   description: Main office printer
+  #   location: Building A, Floor 1
+  #   default: true  # Set as default printer
+  
+  # Example: Network printer via raw socket (JetDirect, port 9100)
+  # - name: Warehouse_Label
+  #   uri: socket://192.168.1.101:9100
+  #   driver: raw  # Raw queue, no processing
+  #   description: Zebra label printer
+  #   location: Warehouse
+
+  # Example: Network printer via LPD
+  # - name: Legacy_Printer
+  #   uri: lpd://192.168.1.102/queue
+  #   driver: everywhere
+  #   description: Old network printer
+
+  # Example: Specific PPD driver
+  # - name: HP_LaserJet
+  #   uri: socket://192.168.1.103:9100
+  #   driver: drv:///hp/hpcups.drv/hp-laserjet_pro_m404-m405-ps.ppd
+  #   description: HP LaserJet Pro
+
 logging:
   level: INFO
   file: logs/print_server.log

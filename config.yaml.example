@@ -54,6 +54,31 @@ security:
   #   - http://localhost:8069
   #   - https://your-odoo-domain.com
 
+# Printer Auto-Configuration (Linux/CUPS only)
+# Define printers to be automatically added to CUPS on server startup
+# Printers already existing in CUPS will be skipped
+printers:
+  # Example: Network printer via IPP (AirPrint/driverless)
+  # - name: Office_Printer
+  #   uri: ipp://192.168.1.100/ipp/print
+  #   driver: everywhere      # 'everywhere' = driverless IPP, 'raw' = no processing
+  #   description: Main office printer
+  #   location: Building A, Floor 1
+  #   default: true           # Set as system default printer
+  
+  # Example: Label printer via raw socket (JetDirect/port 9100)
+  # - name: Zebra_Labels
+  #   uri: socket://192.168.1.101:9100
+  #   driver: raw
+  #   description: Zebra ZD420
+  #   location: Warehouse
+  
+  # Example: Printer with specific PPD driver
+  # - name: HP_LaserJet
+  #   uri: socket://192.168.1.102:9100
+  #   driver: drv:///hp/hpcups.drv/hp-laserjet_pro_m404-m405-ps.ppd
+  #   description: HP LaserJet Pro M404
+
 # Odoo Connection Configuration
 # Used when print server needs to connect TO Odoo (cloud/Odoo.sh scenarios)
 # The print server will poll Odoo for pending print jobs
