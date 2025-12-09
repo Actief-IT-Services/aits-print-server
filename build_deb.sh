@@ -12,7 +12,7 @@ set -e
 
 # Configuration
 PACKAGE_NAME="aits-print-server"
-VERSION="1.0.0"
+VERSION="1.1.0"
 MAINTAINER="Actief IT Services <info@actief-it.be>"
 DESCRIPTION="AITS Print Server for Odoo Direct Printing"
 ARCH="all"
@@ -122,7 +122,9 @@ echo "=========================================="
 
 # Install Python packages system-wide
 echo "Installing Python dependencies..."
+pip3 install flask flask-cors pyyaml requests pycups --break-system-packages 2>/dev/null || \
 pip3 install flask flask-cors pyyaml requests pycups 2>/dev/null || \
+python3 -m pip install flask flask-cors pyyaml requests pycups --break-system-packages 2>/dev/null || \
 python3 -m pip install flask flask-cors pyyaml requests pycups 2>/dev/null || \
 apt-get install -y python3-flask python3-yaml python3-requests 2>/dev/null || true
 
@@ -152,27 +154,65 @@ chmod 755 /opt/aits-print-server
 chmod 644 /opt/aits-print-server/*.py
 chmod 644 /opt/aits-print-server/config.yaml 2>/dev/null || true
 
-# Reload systemd and enable service
-echo "Enabling systemd service..."
+# ==========================================
+# Disable sleep/suspend/hibernate for server
+# ==========================================
+echo "Disabling sleep/suspend/hibernate..."
+systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
+
+# ==========================================
+# Configure CUPS for remote access
+# ==========================================
+echo "Configuring CUPS for remote administration..."
+cupsctl --remote-admin --remote-any 2>/dev/null || true
+cupsctl --share-printers 2>/dev/null || true
+systemctl restart cups 2>/dev/null || true
+
+# ==========================================
+# Configure firewall (if ufw is installed)
+# ==========================================
+if command -v ufw &> /dev/null; then
+    echo "Configuring firewall..."
+    ufw allow 8888/tcp comment 'AITS Print Server' 2>/dev/null || true
+    ufw allow 631/tcp comment 'CUPS Web Interface' 2>/dev/null || true
+fi
+
+# ==========================================
+# Reload systemd and enable + start service
+# ==========================================
+echo "Enabling and starting systemd service..."
 systemctl daemon-reload
 systemctl enable aits-print-server
+systemctl start aits-print-server
+
+# Wait a moment and check status
+sleep 2
+if systemctl is-active --quiet aits-print-server; then
+    echo ""
+    echo "=========================================="
+    echo "✓ AITS Print Server is running!"
+    echo "=========================================="
+else
+    echo ""
+    echo "=========================================="
+    echo "⚠ Service may need attention. Check with:"
+    echo "  journalctl -u aits-print-server -n 50"
+    echo "=========================================="
+fi
 
 echo ""
 echo "=========================================="
 echo "Installation complete!"
 echo "=========================================="
 echo ""
+echo "Print Server:  http://localhost:8888"
+echo "CUPS Admin:    https://localhost:631"
+echo "Config file:   /opt/aits-print-server/config.yaml"
+echo ""
 echo "Commands:"
-echo "  Start:   sudo systemctl start aits-print-server"
-echo "  Stop:    sudo systemctl stop aits-print-server"
 echo "  Status:  sudo systemctl status aits-print-server"
 echo "  Logs:    journalctl -u aits-print-server -f"
-echo ""
-echo "Config:    /opt/aits-print-server/config.yaml"
-echo "Server:    http://localhost:8888"
-echo ""
-echo "To start now, run:"
-echo "  sudo systemctl start aits-print-server"
+echo "  Restart: sudo systemctl restart aits-print-server"
 echo ""
 
 exit 0
