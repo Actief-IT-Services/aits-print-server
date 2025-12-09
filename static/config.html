@@ -420,7 +420,10 @@
                     
                     <div class="form-group">
                         <label for="odooApiKey">API Key</label>
-                        <input type="password" id="odooApiKey" placeholder="Your API key from Odoo">
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="password" id="odooApiKey" placeholder="Your API key from Odoo" style="flex: 1;">
+                            <button type="button" class="btn btn-secondary" onclick="toggleApiKeyVisibility()" style="padding: 8px 12px; min-width: auto;" id="toggleApiKeyBtn">👁 Show</button>
+                        </div>
                         <small>Generate this in Odoo: Settings → Users → API Keys</small>
                     </div>
                     
@@ -751,9 +754,38 @@
                     document.getElementById('odooApiKey').value = config.odoo.api_key || '';
                     document.getElementById('odooPollInterval').value = config.odoo.poll_interval || 5;
                     document.getElementById('odooServerName').value = config.odoo.server_name || '';
+                    
+                    // Show indicator if API key is set
+                    updateApiKeyIndicator();
                 }
             } catch (error) {
                 console.error('Error loading Odoo config:', error);
+            }
+        }
+        
+        // Toggle API key visibility
+        function toggleApiKeyVisibility() {
+            const apiKeyInput = document.getElementById('odooApiKey');
+            const toggleBtn = document.getElementById('toggleApiKeyBtn');
+            
+            if (apiKeyInput.type === 'password') {
+                apiKeyInput.type = 'text';
+                toggleBtn.textContent = '🔒 Hide';
+            } else {
+                apiKeyInput.type = 'password';
+                toggleBtn.textContent = '👁 Show';
+            }
+        }
+        
+        // Update API key indicator
+        function updateApiKeyIndicator() {
+            const apiKeyInput = document.getElementById('odooApiKey');
+            if (apiKeyInput.value && apiKeyInput.value.length > 0) {
+                apiKeyInput.style.borderColor = '#28a745';
+                apiKeyInput.style.backgroundColor = '#f0fff0';
+            } else {
+                apiKeyInput.style.borderColor = '';
+                apiKeyInput.style.backgroundColor = '';
             }
         }
         
