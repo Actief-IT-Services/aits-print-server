@@ -1,0 +1,8 @@
+Origin: Actief IT Services
+Label: AITS Print Server
+Suite: stable
+Codename: stable
+Architectures: all
+Components: main
+Description: AITS Print Server APT Repository
+Date: Fri, 12 Dec 2025 12:44:59 +0100

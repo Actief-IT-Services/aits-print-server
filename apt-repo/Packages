@@ -1,0 +1,23 @@
+Package: aits-print-server
+Version: 1.3.0
+Architecture: all
+Maintainer: Actief IT Services <info@actief-it.be>
+Depends: python3 (>= 3.8), python3-pip, python3-venv, cups, libcups2-dev, python3-flask, python3-yaml, python3-requests
+Recommends: python3-cups
+Filename: ./aits-print-server_1.3.0_all.deb
+Size: 239938
+MD5sum: b5509f3ee5598a913e1c331a434f6bc4
+SHA1: eea19f8882ffee35bb847c280d27b3508444d3c1
+SHA256: 994347855e83b32278ed86db67ada4cf43c7fc6bfc6c418e71130477f1377d04
+Section: utils
+Priority: optional
+Homepage: https://www.actief-it.be
+Description: AITS Print Server for Odoo Direct Printing
+ AITS Print Server enables direct printing from Odoo to local printers.
+ Features:
+  - REST API for print job management
+  - CUPS integration for Linux printing
+  - Auto-discovery of network printers
+  - Systemd service for auto-start
+  - Web configuration interface
+

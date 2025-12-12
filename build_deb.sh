@@ -178,6 +178,16 @@ if command -v ufw &> /dev/null; then
 fi
 
 # ==========================================
+# Setup APT Repository for automatic updates
+# ==========================================
+echo "Setting up APT repository for automatic updates..."
+APT_SOURCE_FILE="/etc/apt/sources.list.d/aits-print-server.list"
+if [ ! -f "$APT_SOURCE_FILE" ]; then
+    echo "deb [trusted=yes] https://raw.githubusercontent.com/Actief-IT-Services/aits-print-server/main/apt-repo ./" > "$APT_SOURCE_FILE"
+    echo "✓ APT repository configured for automatic updates"
+fi
+
+# ==========================================
 # Reload systemd and enable + start service
 # ==========================================
 echo "Enabling and starting systemd service..."
