@@ -377,7 +377,7 @@
             <div class="tabs">
                 <button class="tab active" onclick="switchTab('server')">Server Settings</button>
                 <button class="tab" onclick="switchTab('odoo')">Odoo Connection</button>
-                <button class="tab" id="networkTabBtn" onclick="switchTab('network')" style="display: none;">Network</button>
+                <button class="tab" id="networkTabBtn" onclick="switchTab('network')">Network</button>
                 <button class="tab" onclick="switchTab('printers')">Printers</button>
                 <button class="tab" onclick="switchTab('about')">About</button>
             </div>
@@ -1491,19 +1491,15 @@
             loadOdooConfig();
             refreshPrinters();
             
-            // Check if on Linux before showing network tab
+            // Always show Network tab and load network data
             const isLinux = await checkLinuxPlatform();
-            console.log('Is Linux:', isLinux);
+            console.log('Platform is Linux:', isLinux);
             
-            const networkTabBtn = document.getElementById('networkTabBtn');
-            const networkTabContent = document.getElementById('network-tab');
             const networkNotSupported = document.getElementById('networkNotSupported');
             const networkSettings = document.getElementById('networkSettings');
             
             if (isLinux) {
-                // Show network tab and load data
-                console.log('Showing Network tab for Linux');
-                if (networkTabBtn) networkTabBtn.style.display = 'inline-block';
+                // Show network settings on Linux
                 if (networkNotSupported) networkNotSupported.style.display = 'none';
                 if (networkSettings) networkSettings.style.display = 'block';
                 loadNetworkStatus();
@@ -1511,10 +1507,7 @@
                 // Refresh network status every 60 seconds
                 setInterval(loadNetworkStatus, 60000);
             } else {
-                // Hide network tab button on non-Linux systems
-                console.log('Hiding Network tab (not Linux)');
-                if (networkTabBtn) networkTabBtn.style.display = 'none';
-                // Or show "not supported" message if they somehow get to the tab
+                // Show "not supported" message on non-Linux
                 if (networkNotSupported) networkNotSupported.style.display = 'block';
                 if (networkSettings) networkSettings.style.display = 'none';
             }
