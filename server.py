@@ -9,6 +9,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import platform
+import socket
 import traceback
 
 # Early console output for debugging
