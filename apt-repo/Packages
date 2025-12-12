@@ -5,10 +5,10 @@ Maintainer: Actief IT Services <info@actief-it.be>
 Depends: python3 (>= 3.8), python3-pip, python3-venv, cups, libcups2-dev, python3-flask, python3-yaml, python3-requests
 Recommends: python3-cups
 Filename: ./aits-print-server_1.3.0_all.deb
-Size: 240700
-MD5sum: 394e497b62e0bb313b7119c907c484b8
-SHA1: 6a5084fa5f4949590415171f5147216d7d9def85
-SHA256: 383fc7952c26bca622c3b055378c7393279c7e1472b55a229ae64a3e56fc6017
+Size: 240748
+MD5sum: e0af5131ffcdb6dd3a4ca864eaf7357e
+SHA1: 7f4dce7bdc57ea9614db7a5ed5f2732166c2e6f8
+SHA256: 9963de67c50d8538ef05b5e310b02495a3ac8831d4861cd4e191ffcd939cb4ae
 Section: utils
 Priority: optional
 Homepage: https://www.actief-it.be
