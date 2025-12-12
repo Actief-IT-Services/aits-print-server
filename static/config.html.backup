@@ -13,168 +13,83 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #f5f7fa;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding: 0;
-            margin: 0;
+            padding: 20px;
         }
         
         .container {
-            max-width: 100%;
-            margin: 0;
+            max-width: 900px;
+            margin: 0 auto;
             background: white;
-            min-height: 100vh;
-            display: flex;
-        }
-        
-        .sidebar {
-            width: 200px;
-            background: white;
-            border-right: 1px solid #e5e7eb;
-            padding: 20px 0;
-            flex-shrink: 0;
-        }
-        
-        .logo {
-            padding: 0 20px 20px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            border-bottom: 1px solid #e5e7eb;
-            margin-bottom: 20px;
-        }
-        
-        .logo img {
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
-            background: #1f2937;
-            padding: 6px;
-        }
-        
-        .logo-text {
-            font-size: 16px;
-            font-weight: 600;
-            color: #1f2937;
-        }
-        
-        .nav-menu {
-            list-style: none;
-        }
-        
-        .nav-item {
-            padding: 12px 20px;
-            cursor: pointer;
-            color: #6b7280;
-            font-size: 14px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            transition: all 0.2s;
-            border-left: 3px solid transparent;
-        }
-        
-        .nav-item:hover {
-            background: #f9fafb;
-            color: #1f2937;
-        }
-        
-        .nav-item.active {
-            background: #eff6ff;
-            color: #2563eb;
-            border-left-color: #2563eb;
-        }
-        
-        .nav-icon {
-            width: 20px;
-            text-align: center;
-        }
-        
-        .main-content {
-            flex: 1;
-            overflow-y: auto;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
         }
         
         .header {
-            background: white;
-            border-bottom: 1px solid #e5e7eb;
-            padding: 20px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
         }
         
         .header h1 {
-            font-size: 24px;
-            font-weight: 600;
-            color: #1f2937;
-            margin: 0;
+            font-size: 28px;
+            margin-bottom: 10px;
         }
         
-        .header-actions {
-            display: flex;
-            gap: 12px;
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
         }
         
         .status-bar {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            padding: 30px;
-            background: #f9fafb;
+            display: flex;
+            justify-content: space-around;
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
         }
         
         .status-item {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            text-align: center;
         }
         
         .status-label {
-            font-size: 13px;
-            color: #6b7280;
-            margin-bottom: 8px;
-            font-weight: 500;
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 5px;
         }
         
         .status-value {
-            font-size: 28px;
-            font-weight: 600;
-            color: #1f2937;
+            font-size: 18px;
+            font-weight: bold;
         }
         
         .status-value.online {
-            color: #10b981;
+            color: #28a745;
         }
         
         .status-value.offline {
-            color: #ef4444;
+            color: #dc3545;
         }
         
         .content {
             padding: 30px;
-            background: #f9fafb;
-            min-height: calc(100vh - 200px);
         }
         
         .section {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
         }
         
         .section-title {
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 600;
-            margin-bottom: 20px;
-            color: #1f2937;
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            margin-bottom: 15px;
+            color: #333;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
         }
         
         .form-group {
@@ -191,19 +106,17 @@
         .form-group input,
         .form-group select {
             width: 100%;
-            padding: 10px 14px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
+            padding: 10px 15px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
             font-size: 14px;
-            transition: all 0.2s;
-            background: white;
+            transition: border-color 0.3s;
         }
         
         .form-group input:focus,
         .form-group select:focus {
             outline: none;
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+            border-color: #667eea;
         }
         
         .form-group small {
@@ -220,44 +133,43 @@
         }
         
         .btn {
-            padding: 10px 20px;
+            padding: 12px 24px;
             border: none;
-            border-radius: 8px;
+            border-radius: 5px;
             font-size: 14px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+            transition: all 0.3s;
         }
         
         .btn-primary {
-            background: #2563eb;
+            background: #667eea;
             color: white;
             flex: 1;
         }
         
         .btn-primary:hover {
-            background: #1d4ed8;
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
         }
         
         .btn-secondary {
-            background: #6b7280;
+            background: #6c757d;
             color: white;
         }
         
         .btn-secondary:hover {
-            background: #4b5563;
+            background: #5a6268;
         }
         
         .btn-success {
-            background: #10b981;
+            background: #28a745;
             color: white;
         }
         
         .btn-success:hover {
-            background: #059669;
+            background: #218838;
         }
         
         .printer-list {
@@ -320,32 +232,34 @@
         }
         
         .tabs {
-            display: none;
+            display: flex;
+            border-bottom: 2px solid #e9ecef;
+            margin-bottom: 20px;
         }
         
         .tab {
-            padding: 12px 20px;
+            padding: 12px 24px;
             cursor: pointer;
             border: none;
             background: none;
             font-size: 14px;
             font-weight: 500;
-            color: #6b7280;
+            color: #6c757d;
             position: relative;
         }
         
         .tab.active {
-            color: #2563eb;
+            color: #667eea;
         }
         
         .tab.active::after {
             content: '';
             position: absolute;
-            bottom: 0;
+            bottom: -2px;
             left: 0;
             right: 0;
             height: 2px;
-            background: #2563eb;
+            background: #667eea;
         }
         
         .tab-content {
@@ -435,63 +349,38 @@
 </head>
 <body>
     <div class="container">
-        <!-- Sidebar Navigation -->
-        <div class="sidebar">
-            <div class="logo">
-                <img src="/static/icon.png" alt="Logo">
-                <span class="logo-text">AITS Print Server</span>
-            </div>
-            <ul class="nav-menu">
-                <li class="nav-item active" onclick="switchTab('server')">
-                    <span class="nav-icon">⚙️</span>
-                    <span>Server Settings</span>
-                </li>
-                <li class="nav-item" onclick="switchTab('odoo')">
-                    <span class="nav-icon">🔗</span>
-                    <span>Odoo Connection</span>
-                </li>
-                <li class="nav-item" id="networkTabBtn" onclick="switchTab('network')">
-                    <span class="nav-icon">🌐</span>
-                    <span>Network</span>
-                </li>
-                <li class="nav-item" onclick="switchTab('printers')">
-                    <span class="nav-icon">🖨️</span>
-                    <span>Printers</span>
-                </li>
-                <li class="nav-item" onclick="switchTab('about')">
-                    <span class="nav-icon">ℹ️</span>
-                    <span>About</span>
-                </li>
-            </ul>
+        <div class="header">
+            <img src="/static/icon.png" alt="Logo" style="width: 48px; height: 48px; margin-bottom: 10px;">
+            <h1>AITS Print Server</h1>
+            <p>Configuration & Management</p>
+            <p style="font-size: 11px; opacity: 0.8; margin-top: 5px;">by Actief IT Services</p>
         </div>
         
-        <!-- Main Content Area -->
-        <div class="main-content">
-            <div class="header">
-                <h1>AITS Print Server</h1>
-                <div class="header-actions">
-                    <button class="btn btn-secondary" onclick="location.reload()">🔄 Reload</button>
-                    <button class="btn btn-success" onclick="testOdooConnection()">✓ Test Connection</button>
-                </div>
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-label">Server Status</div>
+                <div class="status-value" id="serverStatus">Checking...</div>
             </div>
-            
-            <div class="status-bar">
-                <div class="status-item">
-                    <div class="status-label">Server States</div>
-                    <div class="status-value" id="serverStatus">Checking...</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-label">Port</div>
-                    <div class="status-value" id="serverPort">8888</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-label">Printers</div>
-                    <div class="status-value" id="printerCount">0</div>
-                </div>
+            <div class="status-item">
+                <div class="status-label">Port</div>
+                <div class="status-value" id="serverPort">8888</div>
             </div>
-            
-            <div class="content">
+            <div class="status-item">
+                <div class="status-label">Printers</div>
+                <div class="status-value" id="printerCount">0</div>
+            </div>
+        </div>
+        
+        <div class="content">
             <div id="alert" class="alert"></div>
+            
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('server')">Server Settings</button>
+                <button class="tab" onclick="switchTab('odoo')">Odoo Connection</button>
+                <button class="tab" id="networkTabBtn" onclick="switchTab('network')">Network</button>
+                <button class="tab" onclick="switchTab('printers')">Printers</button>
+                <button class="tab" onclick="switchTab('about')">About</button>
+            </div>
             
             <!-- Server Settings Tab -->
             <div id="server-tab" class="tab-content active">
@@ -850,9 +739,8 @@
                     </div>
                 </div>
             </div>
-            </div> <!-- content -->
-        </div> <!-- main-content -->
-    </div> <!-- container -->
+        </div>
+    </div>
     
     <script>
         // API Base URL
@@ -903,40 +791,23 @@
         
         // Switch tabs
         function switchTab(tabName) {
-            // Hide all tab contents
+            // Hide all tabs
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
             });
-            
-            // Remove active class from all nav items
-            document.querySelectorAll('.nav-item').forEach(item => {
-                item.classList.remove('active');
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
             });
             
-            // Show selected tab content
+            // Show selected tab
             document.getElementById(tabName + '-tab').classList.add('active');
-            
-            // Add active class to clicked nav item
-            event.target.closest('.nav-item').classList.add('active');
-            
-            // Update page title
-            const titles = {
-                'server': 'Server Settings',
-                'odoo': 'Odoo Connection',
-                'network': 'Network Settings',
-                'printers': 'Printer Management',
-                'about': 'About & Diagnostics'
-            };
-            document.querySelector('.header h1').textContent = titles[tabName] || 'AITS Print Server';
+            event.target.classList.add('active');
             
             // Load data for specific tabs
             if (tabName === 'printers') {
                 refreshPrinters();
             } else if (tabName === 'about') {
                 loadDebugInfo();
-            } else if (tabName === 'network') {
-                loadNetworkStatus();
-                loadSavedNetworks();
             }
         }
         

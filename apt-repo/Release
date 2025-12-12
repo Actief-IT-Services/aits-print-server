@@ -5,13 +5,13 @@ Codename: stable
 Architectures: all
 Components: main
 Description: AITS Print Server APT Repository
-Date: Fri, 12 Dec 2025 14:55:04 +0000
+Date: Fri, 12 Dec 2025 15:37:22 +0000
 MD5Sum:
- b1709e554695ac4d6a120647c690665f 867 Packages
- bee7a1653ae4b06d2d6bd596f7aafb47 564 Packages.gz
+ e0ba8230295c225ee527e799c45d5042 867 Packages
+ a4411f69bcab49f342faeee7d1b212f9 565 Packages.gz
 SHA1:
- d6c539c6d52255c2b0dc44c139b1821293ef5951 867 Packages
- d4deecabb671385db18151edeefab5f6cfe6a3ab 564 Packages.gz
+ e45df04c1e511b4f262a883effada48a3c4ac12b 867 Packages
+ c90efbce1d905f2a21b00544b3c1e521d28c1ab7 565 Packages.gz
 SHA256:
- ea133d0d43c0e402b823942a674a7300137bb2f0cf8083c8538d2bd60c44f9e7 867 Packages
- cb0601c6d1ff2cdd309ba457f6ae4b138f91bcc9e1c8065fc5681dfbfc4477a4 564 Packages.gz
+ a9786c3ee1464023fe6d464fac72c995772b74c376f140d0b4bd258718e37d33 867 Packages
+ 1a29517fca3c4828294829ab3a138228b911c910b16e0a24e1f594a3d7f350e1 565 Packages.gz
