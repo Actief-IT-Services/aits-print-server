@@ -1420,6 +1420,240 @@ def save_network_config():
         }), 500
 
 
+@app.route('/api/system/info', methods=['GET'])
+def get_system_info():
+    """Get system information including platform"""
+    import platform as plat
+    return jsonify({
+        'success': True,
+        'platform': plat.system().lower(),
+        'platform_release': plat.release(),
+        'platform_version': plat.version(),
+        'machine': plat.machine(),
+        'hostname': socket.gethostname()
+    })
+
+
+@app.route('/api/network/wifi/saved', methods=['GET'])
+def get_saved_networks():
+    """Get list of saved WiFi networks"""
+    if platform.system() != 'Linux':
+        return jsonify({
+            'success': False,
+            'error': 'WiFi management only available on Linux'
+        }), 400
+    
+    try:
+        import subprocess
+        
+        # Use nmcli to list saved connections
+        result = subprocess.run(
+            ['nmcli', '-t', '-f', 'NAME,TYPE', 'connection', 'show'],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        networks = []
+        if result.returncode == 0:
+            for line in result.stdout.strip().split('\n'):
+                if line:
+                    parts = line.split(':')
+                    if len(parts) >= 2 and parts[1] in ['802-11-wireless', 'wifi']:
+                        networks.append({
+                            'ssid': parts[0],
+                            'type': 'wifi'
+                        })
+        
+        return jsonify({
+            'success': True,
+            'networks': networks
+        })
+        
+    except FileNotFoundError:
+        return jsonify({
+            'success': False,
+            'error': 'NetworkManager (nmcli) not installed'
+        }), 500
+    except Exception as e:
+        logger.error(f"Error getting saved networks: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/network/wifi/saved', methods=['POST'])
+def add_saved_network():
+    """Add a WiFi network to saved connections (pre-configure)"""
+    if platform.system() != 'Linux':
+        return jsonify({
+            'success': False,
+            'error': 'WiFi management only available on Linux'
+        }), 400
+    
+    try:
+        import subprocess
+        
+        data = request.get_json()
+        ssid = data.get('ssid')
+        password = data.get('password', '')
+        security = data.get('security', 'wpa-psk')  # wpa-psk, wpa-eap, or none
+        priority = data.get('priority', 0)
+        
+        if not ssid:
+            return jsonify({
+                'success': False,
+                'error': 'SSID is required'
+            }), 400
+        
+        # Use nmcli to add connection (won't auto-connect until network is in range)
+        cmd = ['nmcli', 'connection', 'add', 
+               'type', 'wifi',
+               'con-name', ssid,
+               'ssid', ssid,
+               'autoconnect', 'yes',
+               'connection.autoconnect-priority', str(priority)]
+        
+        # Handle security type
+        if security == 'wpa-psk' and password:
+            cmd.extend(['wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', password])
+        elif security == 'wpa-eap':
+            # For enterprise networks, just set the key-mgmt; user needs to configure more
+            cmd.extend(['wifi-sec.key-mgmt', 'wpa-eap'])
+            if password:
+                cmd.extend(['wifi-sec.psk', password])
+        # For 'none' (open network), no security settings needed
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0:
+            return jsonify({
+                'success': True,
+                'message': f'Network "{ssid}" saved successfully'
+            })
+        else:
+            # Check if connection already exists
+            if 'already exists' in result.stderr:
+                return jsonify({
+                    'success': False,
+                    'error': f'Network "{ssid}" already saved'
+                }), 400
+            return jsonify({
+                'success': False,
+                'error': result.stderr.strip() or 'Failed to save network'
+            }), 400
+            
+    except FileNotFoundError:
+        return jsonify({
+            'success': False,
+            'error': 'NetworkManager (nmcli) not installed'
+        }), 500
+    except Exception as e:
+        logger.error(f"Error adding saved network: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/network/wifi/saved/connect', methods=['POST'])
+def connect_saved_network():
+    """Connect to a previously saved WiFi network"""
+    if platform.system() != 'Linux':
+        return jsonify({
+            'success': False,
+            'error': 'WiFi management only available on Linux'
+        }), 400
+    
+    try:
+        import subprocess
+        
+        data = request.get_json()
+        ssid = data.get('ssid')
+        
+        if not ssid:
+            return jsonify({
+                'success': False,
+                'error': 'SSID is required'
+            }), 400
+        
+        # Use nmcli to activate the connection
+        result = subprocess.run(
+            ['nmcli', 'connection', 'up', ssid],
+            capture_output=True, text=True, timeout=30
+        )
+        
+        if result.returncode == 0:
+            return jsonify({
+                'success': True,
+                'message': f'Connecting to {ssid}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.stderr.strip() or 'Failed to connect'
+            }), 400
+            
+    except FileNotFoundError:
+        return jsonify({
+            'success': False,
+            'error': 'NetworkManager (nmcli) not installed'
+        }), 500
+    except Exception as e:
+        logger.error(f"Error connecting to saved network: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/network/wifi/saved/<ssid>', methods=['DELETE'])
+def delete_saved_network(ssid):
+    """Delete a saved WiFi network"""
+    if platform.system() != 'Linux':
+        return jsonify({
+            'success': False,
+            'error': 'WiFi management only available on Linux'
+        }), 400
+    
+    try:
+        import subprocess
+        
+        if not ssid:
+            return jsonify({
+                'success': False,
+                'error': 'SSID is required'
+            }), 400
+        
+        # Use nmcli to delete the connection
+        result = subprocess.run(
+            ['nmcli', 'connection', 'delete', ssid],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        if result.returncode == 0:
+            return jsonify({
+                'success': True,
+                'message': f'Network "{ssid}" deleted'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.stderr.strip() or 'Failed to delete network'
+            }), 400
+            
+    except FileNotFoundError:
+        return jsonify({
+            'success': False,
+            'error': 'NetworkManager (nmcli) not installed'
+        }), 500
+    except Exception as e:
+        logger.error(f"Error deleting saved network: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({

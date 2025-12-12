@@ -517,123 +517,169 @@
             </div>
             
             <!-- Printers Tab -->
-            <!-- Network Tab -->
+            <!-- Network Tab (Linux only) -->
             <div id="network-tab" class="tab-content">
-                <div class="section">
-                    <div class="section-title">🌐 WiFi Connection</div>
-                    <div class="network-status" id="wifiStatus">
-                        <div class="network-info">
+                <div id="networkNotSupported" style="display: none; padding: 40px; text-align: center; color: #6c757d;">
+                    <h3>⚠️ Network Settings Not Available</h3>
+                    <p style="margin-top: 10px;">Network configuration is only available on Linux systems (Raspberry Pi, Debian, etc.)</p>
+                </div>
+                
+                <div id="networkSettings">
+                    <div class="section">
+                        <div class="section-title">🌐 Current WiFi Connection</div>
+                        <div class="network-status" id="wifiStatus">
+                            <div class="network-info">
+                                <div class="form-group">
+                                    <label>Current SSID</label>
+                                    <div class="status-display" id="currentSsid">Loading...</div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Signal Strength</label>
+                                    <div class="status-display" id="wifiSignal">--</div>
+                                </div>
+                                <div class="form-group">
+                                    <label>IP Address</label>
+                                    <div class="status-display" id="wifiIp">--</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group" style="margin-top: 20px;">
+                            <label>Connect to Available Network</label>
+                            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                                <select id="wifiNetworkList" style="flex: 1;">
+                                    <option value="">-- Scan for networks first --</option>
+                                </select>
+                                <button class="btn btn-secondary" onclick="scanWifiNetworks()" style="min-width: auto; padding: 10px 15px;">🔍 Scan</button>
+                            </div>
+                            <input type="password" id="wifiPassword" placeholder="WiFi Password">
+                            <small>Enter the password for the selected network</small>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn btn-primary" onclick="connectWifi()">📶 Connect to WiFi</button>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">💾 Saved WiFi Networks (Pre-configuration)</div>
+                        <p style="margin-bottom: 15px; color: #6c757d; font-size: 14px;">
+                            Add WiFi networks here before deploying to a customer site. The device will automatically connect to known networks.
+                        </p>
+                        
+                        <div id="savedWifiList" class="printer-list" style="margin-bottom: 15px; max-height: 200px;">
+                            <div class="loading">Loading saved networks...</div>
+                        </div>
+                        
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 15px;">
                             <div class="form-group">
-                                <label>Current SSID</label>
-                                <div class="status-display" id="currentSsid">Loading...</div>
+                                <label>Add New WiFi Network</label>
+                                <input type="text" id="newSsid" placeholder="Network Name (SSID)">
                             </div>
                             <div class="form-group">
-                                <label>Signal Strength</label>
-                                <div class="status-display" id="wifiSignal">--</div>
+                                <label>Password</label>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <input type="password" id="newWifiPassword" placeholder="WiFi Password" style="flex: 1;">
+                                    <button type="button" class="btn btn-secondary" onclick="toggleNewWifiPassword()" style="padding: 8px 12px; min-width: auto;" id="toggleNewWifiBtn">👁</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Security Type</label>
+                                <select id="newWifiSecurity">
+                                    <option value="wpa-psk">WPA/WPA2 Personal (Most common)</option>
+                                    <option value="wpa-eap">WPA/WPA2 Enterprise</option>
+                                    <option value="none">Open (No password)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Priority</label>
+                                <input type="number" id="newWifiPriority" value="0" min="0" max="100">
+                                <small>Higher priority networks are preferred (0-100)</small>
+                            </div>
+                            <button class="btn btn-success" onclick="addSavedWifi()">➕ Add Network</button>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">🔌 Wired Connection (eth0)</div>
+                        <div class="network-info">
+                            <div class="form-group">
+                                <label>Status</label>
+                                <div class="status-display" id="ethStatus">Loading...</div>
                             </div>
                             <div class="form-group">
                                 <label>IP Address</label>
-                                <div class="status-display" id="wifiIp">--</div>
+                                <div class="status-display" id="ethIp">--</div>
+                            </div>
+                            <div class="form-group">
+                                <label>MAC Address</label>
+                                <div class="status-display" id="ethMac">--</div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="form-group" style="margin-top: 20px;">
-                        <label>Connect to WiFi Network</label>
-                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                            <select id="wifiNetworkList" style="flex: 1;">
-                                <option value="">-- Select Network --</option>
+                        
+                        <div class="form-group" style="margin-top: 20px;">
+                            <label>IP Configuration</label>
+                            <select id="ethDhcp" onchange="toggleEthStatic()">
+                                <option value="dhcp">DHCP (Automatic)</option>
+                                <option value="static">Static IP</option>
                             </select>
-                            <button class="btn btn-secondary" onclick="scanWifiNetworks()" style="min-width: auto; padding: 10px 15px;">🔍 Scan</button>
                         </div>
-                        <input type="password" id="wifiPassword" placeholder="WiFi Password">
-                        <small>Enter the password for the selected network</small>
-                    </div>
-                    <div class="button-group">
-                        <button class="btn btn-primary" onclick="connectWifi()">📶 Connect to WiFi</button>
-                    </div>
-                </div>
-                
-                <div class="section">
-                    <div class="section-title">🔌 Wired Connection (eth0)</div>
-                    <div class="network-info">
-                        <div class="form-group">
-                            <label>Status</label>
-                            <div class="status-display" id="ethStatus">Loading...</div>
+                        
+                        <div id="ethStaticConfig" style="display: none;">
+                            <div class="form-group">
+                                <label>IP Address</label>
+                                <input type="text" id="ethStaticIp" placeholder="192.168.1.100">
+                            </div>
+                            <div class="form-group">
+                                <label>Subnet Mask</label>
+                                <input type="text" id="ethSubnet" placeholder="255.255.255.0" value="255.255.255.0">
+                            </div>
+                            <div class="form-group">
+                                <label>Gateway</label>
+                                <input type="text" id="ethGateway" placeholder="192.168.1.1">
+                            </div>
+                            <div class="form-group">
+                                <label>DNS Servers</label>
+                                <input type="text" id="ethDns" placeholder="8.8.8.8, 8.8.4.4">
+                                <small>Comma-separated DNS servers</small>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>IP Address</label>
-                            <div class="status-display" id="ethIp">--</div>
-                        </div>
-                        <div class="form-group">
-                            <label>MAC Address</label>
-                            <div class="status-display" id="ethMac">--</div>
+                        <div class="button-group">
+                            <button class="btn btn-primary" onclick="saveEthConfig()">💾 Save Wired Settings</button>
                         </div>
                     </div>
                     
-                    <div class="form-group" style="margin-top: 20px;">
-                        <label>IP Configuration</label>
-                        <select id="ethDhcp" onchange="toggleEthStatic()">
-                            <option value="dhcp">DHCP (Automatic)</option>
-                            <option value="static">Static IP</option>
-                        </select>
-                    </div>
-                    
-                    <div id="ethStaticConfig" style="display: none;">
+                    <div class="section">
+                        <div class="section-title">📶 Wireless IP Configuration (wlan0)</div>
                         <div class="form-group">
-                            <label>IP Address</label>
-                            <input type="text" id="ethStaticIp" placeholder="192.168.1.100">
+                            <label>IP Configuration</label>
+                            <select id="wlanDhcp" onchange="toggleWlanStatic()">
+                                <option value="dhcp">DHCP (Automatic)</option>
+                                <option value="static">Static IP</option>
+                            </select>
                         </div>
-                        <div class="form-group">
-                            <label>Subnet Mask</label>
-                            <input type="text" id="ethSubnet" placeholder="255.255.255.0" value="255.255.255.0">
+                        
+                        <div id="wlanStaticConfig" style="display: none;">
+                            <div class="form-group">
+                                <label>IP Address</label>
+                                <input type="text" id="wlanStaticIp" placeholder="192.168.1.101">
+                            </div>
+                            <div class="form-group">
+                                <label>Subnet Mask</label>
+                                <input type="text" id="wlanSubnet" placeholder="255.255.255.0" value="255.255.255.0">
+                            </div>
+                            <div class="form-group">
+                                <label>Gateway</label>
+                                <input type="text" id="wlanGateway" placeholder="192.168.1.1">
+                            </div>
+                            <div class="form-group">
+                                <label>DNS Servers</label>
+                                <input type="text" id="wlanDns" placeholder="8.8.8.8, 8.8.4.4">
+                                <small>Comma-separated DNS servers</small>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Gateway</label>
-                            <input type="text" id="ethGateway" placeholder="192.168.1.1">
+                        <div class="button-group">
+                            <button class="btn btn-primary" onclick="saveWlanConfig()">💾 Save Wireless Settings</button>
                         </div>
-                        <div class="form-group">
-                            <label>DNS Servers</label>
-                            <input type="text" id="ethDns" placeholder="8.8.8.8, 8.8.4.4">
-                            <small>Comma-separated DNS servers</small>
-                        </div>
-                    </div>
-                    <div class="button-group">
-                        <button class="btn btn-primary" onclick="saveEthConfig()">💾 Save Wired Settings</button>
-                    </div>
-                </div>
-                
-                <div class="section">
-                    <div class="section-title">📶 Wireless Configuration (wlan0)</div>
-                    <div class="form-group">
-                        <label>IP Configuration</label>
-                        <select id="wlanDhcp" onchange="toggleWlanStatic()">
-                            <option value="dhcp">DHCP (Automatic)</option>
-                            <option value="static">Static IP</option>
-                        </select>
-                    </div>
-                    
-                    <div id="wlanStaticConfig" style="display: none;">
-                        <div class="form-group">
-                            <label>IP Address</label>
-                            <input type="text" id="wlanStaticIp" placeholder="192.168.1.101">
-                        </div>
-                        <div class="form-group">
-                            <label>Subnet Mask</label>
-                            <input type="text" id="wlanSubnet" placeholder="255.255.255.0" value="255.255.255.0">
-                        </div>
-                        <div class="form-group">
-                            <label>Gateway</label>
-                            <input type="text" id="wlanGateway" placeholder="192.168.1.1">
-                        </div>
-                        <div class="form-group">
-                            <label>DNS Servers</label>
-                            <input type="text" id="wlanDns" placeholder="8.8.8.8, 8.8.4.4">
-                            <small>Comma-separated DNS servers</small>
-                        </div>
-                    </div>
-                    <div class="button-group">
-                        <button class="btn btn-primary" onclick="saveWlanConfig()">💾 Save Wireless Settings</button>
                     </div>
                 </div>
             </div>
@@ -1270,17 +1316,203 @@
             }
         }
         
+        // ==========================================
+        // Saved WiFi Networks Functions
+        // ==========================================
+        
+        // Load saved WiFi networks
+        async function loadSavedNetworks() {
+            try {
+                const response = await fetch(API_BASE + '/api/network/wifi/saved');
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                const listDiv = document.getElementById('savedWifiList');
+                
+                if (!data.networks || data.networks.length === 0) {
+                    listDiv.innerHTML = '<div style="color: #666; font-style: italic; padding: 10px;">No saved networks</div>';
+                    return;
+                }
+                
+                let html = '';
+                data.networks.forEach(network => {
+                    html += '<div class="printer-item" style="display: flex; justify-content: space-between; align-items: center;">';
+                    html += '<div class="printer-name">📶 ' + escapeHtml(network.ssid) + '</div>';
+                    html += '<div class="btn-group">';
+                    html += '<button class="btn btn-sm btn-success" onclick="connectSavedNetwork(\'' + escapeHtml(network.ssid).replace(/'/g, "\\'") + '\')" title="Connect">Connect</button>';
+                    html += '<button class="btn btn-sm btn-danger" onclick="deleteSavedNetwork(\'' + escapeHtml(network.ssid).replace(/'/g, "\\'") + '\')" title="Delete" style="margin-left: 5px;">Delete</button>';
+                    html += '</div>';
+                    html += '</div>';
+                });
+                
+                listDiv.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading saved networks:', error);
+            }
+        }
+        
+        // Add new saved WiFi network (manual pre-configuration)
+        async function addSavedWifi() {
+            const ssid = document.getElementById('newSsid').value.trim();
+            const password = document.getElementById('newWifiPassword').value;
+            const security = document.getElementById('newWifiSecurity').value;
+            const priority = document.getElementById('newWifiPriority').value || 0;
+            
+            if (!ssid) {
+                showAlert('Please enter a network name (SSID)', 'error');
+                return;
+            }
+            
+            if (security !== 'none' && !password) {
+                showAlert('Please enter a password for secured networks', 'error');
+                return;
+            }
+            
+            showAlert('Saving network ' + ssid + '...', 'info');
+            
+            try {
+                const response = await fetch(API_BASE + '/api/network/wifi/saved', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        ssid: ssid, 
+                        password: password,
+                        security: security,
+                        priority: parseInt(priority)
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✓ Network "' + ssid + '" saved successfully', 'success');
+                    document.getElementById('newSsid').value = '';
+                    document.getElementById('newWifiPassword').value = '';
+                    document.getElementById('newWifiPriority').value = '0';
+                    loadSavedNetworks();
+                } else {
+                    showAlert('✗ Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('✗ Error saving network: ' + error.message, 'error');
+            }
+        }
+        
+        // Toggle password visibility for new WiFi
+        function toggleNewWifiPassword() {
+            const input = document.getElementById('newWifiPassword');
+            const btn = document.getElementById('toggleNewWifiBtn');
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = '🔒';
+            } else {
+                input.type = 'password';
+                btn.textContent = '👁';
+            }
+        }
+        
+        // Connect to a saved WiFi network
+        async function connectSavedNetwork(ssid) {
+            showAlert('Connecting to ' + ssid + '...', 'info');
+            
+            try {
+                const response = await fetch(API_BASE + '/api/network/wifi/saved/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ssid: ssid })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✓ Connecting to ' + ssid + '. Please wait...', 'success');
+                    setTimeout(loadNetworkStatus, 5000);
+                } else {
+                    showAlert('✗ Failed to connect: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('✗ Error connecting: ' + error.message, 'error');
+            }
+        }
+        
+        // Delete a saved WiFi network
+        async function deleteSavedNetwork(ssid) {
+            if (!confirm('Delete saved network "' + ssid + '"?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(API_BASE + '/api/network/wifi/saved/' + encodeURIComponent(ssid), {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✓ Network "' + ssid + '" deleted', 'success');
+                    loadSavedNetworks();
+                } else {
+                    showAlert('✗ Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('✗ Error deleting network: ' + error.message, 'error');
+            }
+        }
+        
+        // Helper function to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Check if running on Linux (for network tab visibility)
+        async function checkLinuxPlatform() {
+            try {
+                const response = await fetch(API_BASE + '/api/system/info');
+                if (!response.ok) return false;
+                
+                const data = await response.json();
+                return data.platform === 'linux';
+            } catch (error) {
+                console.error('Error checking platform:', error);
+                return false;
+            }
+        }
+        
         // Initialize
-        window.addEventListener('load', () => {
+        window.addEventListener('load', async () => {
             checkStatus();
             loadConfig();
             loadOdooConfig();
-            loadNetworkStatus();
             refreshPrinters();
+            
+            // Check if on Linux before showing network tab
+            const isLinux = await checkLinuxPlatform();
+            const networkTabBtn = document.querySelector('.tab[onclick*="network"]');
+            const networkTabContent = document.getElementById('network-tab');
+            const networkNotSupported = document.getElementById('networkNotSupported');
+            const networkSettings = document.getElementById('networkSettings');
+            
+            if (isLinux) {
+                // Show network tab and load data
+                if (networkTabBtn) networkTabBtn.style.display = 'inline-block';
+                if (networkNotSupported) networkNotSupported.style.display = 'none';
+                if (networkSettings) networkSettings.style.display = 'block';
+                loadNetworkStatus();
+                loadSavedNetworks();
+                // Refresh network status every 60 seconds
+                setInterval(loadNetworkStatus, 60000);
+            } else {
+                // Hide network tab button on non-Linux systems
+                if (networkTabBtn) networkTabBtn.style.display = 'none';
+                // Or show "not supported" message if they somehow get to the tab
+                if (networkNotSupported) networkNotSupported.style.display = 'block';
+                if (networkSettings) networkSettings.style.display = 'none';
+            }
             
             // Refresh status every 30 seconds
             setInterval(checkStatus, 30000);
-            setInterval(loadNetworkStatus, 60000);
         });
     </script>
 </body>
