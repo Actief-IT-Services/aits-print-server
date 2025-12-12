@@ -1010,6 +1010,416 @@ def save_odoo_config():
         }), 500
 
 
+# ==========================================
+# Network Management API (Linux only)
+# ==========================================
+
+@app.route('/api/network/status', methods=['GET'])
+def get_network_status():
+    """Get current network status for all interfaces"""
+    if platform.system() != 'Linux':
+        return jsonify({
+            'success': False,
+            'error': 'Network management only available on Linux'
+        }), 400
+    
+    try:
+        import subprocess
+        
+        result = {
+            'wifi': {},
+            'ethernet': {}
+        }
+        
+        # Get WiFi status
+        try:
+            # Get current SSID
+            ssid_result = subprocess.run(
+                ['iwgetid', '-r'],
+                capture_output=True, text=True, timeout=5
+            )
+            result['wifi']['ssid'] = ssid_result.stdout.strip() if ssid_result.returncode == 0 else None
+            
+            # Get WiFi signal strength
+            if result['wifi']['ssid']:
+                signal_result = subprocess.run(
+                    ['iwconfig', 'wlan0'],
+                    capture_output=True, text=True, timeout=5
+                )
+                if 'Signal level' in signal_result.stdout:
+                    import re
+                    match = re.search(r'Signal level[=:](-?\d+)', signal_result.stdout)
+                    if match:
+                        # Convert dBm to percentage (roughly)
+                        dbm = int(match.group(1))
+                        result['wifi']['signal'] = min(100, max(0, 2 * (dbm + 100)))
+            
+            # Get WiFi IP
+            ip_result = subprocess.run(
+                ['ip', '-4', 'addr', 'show', 'wlan0'],
+                capture_output=True, text=True, timeout=5
+            )
+            import re
+            ip_match = re.search(r'inet (\d+\.\d+\.\d+\.\d+)', ip_result.stdout)
+            result['wifi']['ip'] = ip_match.group(1) if ip_match else None
+            result['wifi']['connected'] = bool(result['wifi']['ssid'])
+            
+        except Exception as e:
+            logger.debug(f"WiFi status error: {e}")
+            result['wifi']['connected'] = False
+        
+        # Get Ethernet status
+        try:
+            # Check if eth0 exists and is up
+            eth_result = subprocess.run(
+                ['ip', 'link', 'show', 'eth0'],
+                capture_output=True, text=True, timeout=5
+            )
+            result['ethernet']['exists'] = eth_result.returncode == 0
+            result['ethernet']['connected'] = 'state UP' in eth_result.stdout
+            
+            # Get Ethernet IP
+            ip_result = subprocess.run(
+                ['ip', '-4', 'addr', 'show', 'eth0'],
+                capture_output=True, text=True, timeout=5
+            )
+            import re
+            ip_match = re.search(r'inet (\d+\.\d+\.\d+\.\d+)/(\d+)', ip_result.stdout)
+            if ip_match:
+                result['ethernet']['ip'] = ip_match.group(1)
+                # Convert CIDR to netmask
+                cidr = int(ip_match.group(2))
+                netmask = '.'.join([str((0xffffffff << (32 - cidr) >> i) & 0xff) for i in [24, 16, 8, 0]])
+                result['ethernet']['netmask'] = netmask
+            
+            # Get MAC address
+            mac_result = subprocess.run(
+                ['cat', '/sys/class/net/eth0/address'],
+                capture_output=True, text=True, timeout=5
+            )
+            result['ethernet']['mac'] = mac_result.stdout.strip() if mac_result.returncode == 0 else None
+            
+            # Get gateway
+            gw_result = subprocess.run(
+                ['ip', 'route', 'show', 'default'],
+                capture_output=True, text=True, timeout=5
+            )
+            gw_match = re.search(r'via (\d+\.\d+\.\d+\.\d+)', gw_result.stdout)
+            result['ethernet']['gateway'] = gw_match.group(1) if gw_match else None
+            
+            # Get DNS
+            try:
+                with open('/etc/resolv.conf', 'r') as f:
+                    dns_servers = []
+                    for line in f:
+                        if line.startswith('nameserver'):
+                            dns_servers.append(line.split()[1])
+                    result['ethernet']['dns'] = dns_servers
+            except:
+                result['ethernet']['dns'] = []
+            
+            # Check if using DHCP
+            result['ethernet']['dhcp'] = True  # Default assumption
+            try:
+                dhcp_result = subprocess.run(
+                    ['cat', '/etc/dhcpcd.conf'],
+                    capture_output=True, text=True, timeout=5
+                )
+                if 'interface eth0' in dhcp_result.stdout and 'static ip_address' in dhcp_result.stdout:
+                    result['ethernet']['dhcp'] = False
+            except:
+                pass
+                
+        except Exception as e:
+            logger.debug(f"Ethernet status error: {e}")
+            result['ethernet']['connected'] = False
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error getting network status: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/network/wifi/scan', methods=['GET'])
+def scan_wifi_networks():
+    """Scan for available WiFi networks"""
+    if platform.system() != 'Linux':
+        return jsonify({
+            'success': False,
+            'error': 'WiFi scanning only available on Linux'
+        }), 400
+    
+    try:
+        import subprocess
+        
+        # Get current SSID
+        current_ssid = None
+        try:
+            result = subprocess.run(['iwgetid', '-r'], capture_output=True, text=True, timeout=5)
+            current_ssid = result.stdout.strip() if result.returncode == 0 else None
+        except:
+            pass
+        
+        # Scan for networks using nmcli (if available) or iwlist
+        networks = []
+        
+        # Try nmcli first
+        try:
+            result = subprocess.run(
+                ['nmcli', '-t', '-f', 'SSID,SIGNAL,SECURITY', 'dev', 'wifi', 'list', '--rescan', 'yes'],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                seen_ssids = set()
+                for line in result.stdout.strip().split('\n'):
+                    if line:
+                        parts = line.split(':')
+                        if len(parts) >= 2:
+                            ssid = parts[0]
+                            if ssid and ssid not in seen_ssids:
+                                seen_ssids.add(ssid)
+                                networks.append({
+                                    'ssid': ssid,
+                                    'signal': int(parts[1]) if parts[1].isdigit() else 0,
+                                    'security': parts[2] if len(parts) > 2 else '',
+                                    'connected': ssid == current_ssid
+                                })
+        except FileNotFoundError:
+            # nmcli not available, try iwlist
+            result = subprocess.run(
+                ['sudo', 'iwlist', 'wlan0', 'scan'],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                import re
+                current_network = {}
+                seen_ssids = set()
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    if 'ESSID:' in line:
+                        match = re.search(r'ESSID:"([^"]*)"', line)
+                        if match and match.group(1):
+                            current_network['ssid'] = match.group(1)
+                    elif 'Signal level' in line:
+                        match = re.search(r'Signal level[=:](-?\d+)', line)
+                        if match:
+                            dbm = int(match.group(1))
+                            current_network['signal'] = min(100, max(0, 2 * (dbm + 100)))
+                    elif 'Encryption key:' in line:
+                        current_network['security'] = 'off' not in line.lower()
+                    
+                    if 'ssid' in current_network and 'signal' in current_network:
+                        if current_network['ssid'] not in seen_ssids:
+                            seen_ssids.add(current_network['ssid'])
+                            networks.append({
+                                'ssid': current_network['ssid'],
+                                'signal': current_network.get('signal', 0),
+                                'security': 'WPA' if current_network.get('security') else '',
+                                'connected': current_network['ssid'] == current_ssid
+                            })
+                        current_network = {}
+        
+        # Sort by signal strength
+        networks.sort(key=lambda x: x['signal'], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'networks': networks
+        })
+        
+    except Exception as e:
+        logger.error(f"Error scanning WiFi: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/network/wifi/connect', methods=['POST'])
+def connect_wifi():
+    """Connect to a WiFi network"""
+    if platform.system() != 'Linux':
+        return jsonify({
+            'success': False,
+            'error': 'WiFi management only available on Linux'
+        }), 400
+    
+    try:
+        import subprocess
+        
+        data = request.get_json()
+        ssid = data.get('ssid')
+        password = data.get('password', '')
+        
+        if not ssid:
+            return jsonify({
+                'success': False,
+                'error': 'SSID is required'
+            }), 400
+        
+        # Try nmcli first
+        try:
+            if password:
+                result = subprocess.run(
+                    ['nmcli', 'dev', 'wifi', 'connect', ssid, 'password', password],
+                    capture_output=True, text=True, timeout=30
+                )
+            else:
+                result = subprocess.run(
+                    ['nmcli', 'dev', 'wifi', 'connect', ssid],
+                    capture_output=True, text=True, timeout=30
+                )
+            
+            if result.returncode == 0:
+                return jsonify({
+                    'success': True,
+                    'message': f'Connected to {ssid}'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result.stderr.strip() or 'Failed to connect'
+                }), 400
+                
+        except FileNotFoundError:
+            # nmcli not available, try wpa_supplicant
+            # Create wpa_supplicant config
+            wpa_config = f'''
+network={{
+    ssid="{ssid}"
+    psk="{password}"
+}}
+'''
+            config_file = '/etc/wpa_supplicant/wpa_supplicant.conf'
+            
+            # Check if we can write to the config
+            try:
+                subprocess.run(['sudo', 'tee', '-a', config_file], 
+                             input=wpa_config, capture_output=True, text=True, timeout=10)
+                subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0', 'reconfigure'],
+                             capture_output=True, text=True, timeout=10)
+                return jsonify({
+                    'success': True,
+                    'message': f'WiFi configuration added for {ssid}'
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to configure WiFi: {str(e)}'
+                }), 500
+        
+    except Exception as e:
+        logger.error(f"Error connecting to WiFi: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/network/config', methods=['POST'])
+def save_network_config():
+    """Save network configuration (IP settings)"""
+    if platform.system() != 'Linux':
+        return jsonify({
+            'success': False,
+            'error': 'Network configuration only available on Linux'
+        }), 400
+    
+    try:
+        import subprocess
+        
+        data = request.get_json()
+        interface = data.get('interface', 'eth0')
+        dhcp = data.get('dhcp', True)
+        
+        if interface not in ['eth0', 'wlan0']:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid interface. Use eth0 or wlan0'
+            }), 400
+        
+        # Use dhcpcd.conf for Raspberry Pi / Debian
+        dhcpcd_conf = '/etc/dhcpcd.conf'
+        
+        try:
+            # Read current config
+            with open(dhcpcd_conf, 'r') as f:
+                lines = f.readlines()
+            
+            # Remove existing interface config
+            new_lines = []
+            skip_until_next_interface = False
+            for line in lines:
+                if line.strip().startswith('interface '):
+                    if interface in line:
+                        skip_until_next_interface = True
+                        continue
+                    else:
+                        skip_until_next_interface = False
+                if skip_until_next_interface and line.strip() and not line.startswith('#'):
+                    if line.strip().startswith(('static', 'inform', 'nohook')):
+                        continue
+                new_lines.append(line)
+            
+            # Add new config if static
+            if not dhcp:
+                ip = data.get('ip')
+                netmask = data.get('netmask', '255.255.255.0')
+                gateway = data.get('gateway')
+                dns = data.get('dns', [])
+                
+                if not ip:
+                    return jsonify({
+                        'success': False,
+                        'error': 'IP address is required for static configuration'
+                    }), 400
+                
+                # Convert netmask to CIDR
+                cidr = sum([bin(int(x)).count('1') for x in netmask.split('.')])
+                
+                new_lines.append(f'\ninterface {interface}\n')
+                new_lines.append(f'static ip_address={ip}/{cidr}\n')
+                if gateway:
+                    new_lines.append(f'static routers={gateway}\n')
+                if dns:
+                    dns_str = ' '.join(dns) if isinstance(dns, list) else dns
+                    new_lines.append(f'static domain_name_servers={dns_str}\n')
+            
+            # Write config
+            config_content = ''.join(new_lines)
+            subprocess.run(
+                ['sudo', 'tee', dhcpcd_conf],
+                input=config_content, capture_output=True, text=True, timeout=10
+            )
+            
+            # Restart networking
+            subprocess.run(['sudo', 'systemctl', 'restart', 'dhcpcd'], 
+                         capture_output=True, timeout=30)
+            
+            return jsonify({
+                'success': True,
+                'message': f'Network configuration for {interface} saved and applied'
+            })
+            
+        except FileNotFoundError:
+            # Try netplan for Ubuntu
+            return jsonify({
+                'success': False,
+                'error': 'dhcpcd.conf not found. Network configuration not supported on this system.'
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"Error saving network config: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({

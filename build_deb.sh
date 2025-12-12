@@ -12,7 +12,7 @@ set -e
 
 # Configuration
 PACKAGE_NAME="aits-print-server"
-VERSION="1.1.0"
+VERSION="1.2.0"
 MAINTAINER="Actief IT Services <info@actief-it.be>"
 DESCRIPTION="AITS Print Server for Odoo Direct Printing"
 ARCH="all"

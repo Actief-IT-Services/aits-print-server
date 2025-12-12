@@ -286,6 +286,65 @@
             40% { content: '..'; }
             60%, 100% { content: '...'; }
         }
+        
+        .status-display {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: 1px solid #e9ecef;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        
+        .network-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .wifi-network-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+        
+        .wifi-network-item.connected {
+            background: #d4edda;
+            border-left: 3px solid #28a745;
+        }
+        
+        .signal-strength {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .signal-bars {
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 16px;
+        }
+        
+        .signal-bar {
+            width: 4px;
+            background: #dee2e6;
+            border-radius: 1px;
+        }
+        
+        .signal-bar.active {
+            background: #28a745;
+        }
+        
+        .signal-bar:nth-child(1) { height: 4px; }
+        .signal-bar:nth-child(2) { height: 8px; }
+        .signal-bar:nth-child(3) { height: 12px; }
+        .signal-bar:nth-child(4) { height: 16px; }
     </style>
 </head>
 <body>
@@ -318,6 +377,7 @@
             <div class="tabs">
                 <button class="tab active" onclick="switchTab('server')">Server Settings</button>
                 <button class="tab" onclick="switchTab('odoo')">Odoo Connection</button>
+                <button class="tab" onclick="switchTab('network')">Network</button>
                 <button class="tab" onclick="switchTab('printers')">Printers</button>
                 <button class="tab" onclick="switchTab('about')">About</button>
             </div>
@@ -452,6 +512,128 @@
                             <div class="printer-name">Status</div>
                             <div class="printer-status" id="odooConnectionStatus">Not connected</div>
                         </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Printers Tab -->
+            <!-- Network Tab -->
+            <div id="network-tab" class="tab-content">
+                <div class="section">
+                    <div class="section-title">🌐 WiFi Connection</div>
+                    <div class="network-status" id="wifiStatus">
+                        <div class="network-info">
+                            <div class="form-group">
+                                <label>Current SSID</label>
+                                <div class="status-display" id="currentSsid">Loading...</div>
+                            </div>
+                            <div class="form-group">
+                                <label>Signal Strength</label>
+                                <div class="status-display" id="wifiSignal">--</div>
+                            </div>
+                            <div class="form-group">
+                                <label>IP Address</label>
+                                <div class="status-display" id="wifiIp">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="margin-top: 20px;">
+                        <label>Connect to WiFi Network</label>
+                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <select id="wifiNetworkList" style="flex: 1;">
+                                <option value="">-- Select Network --</option>
+                            </select>
+                            <button class="btn btn-secondary" onclick="scanWifiNetworks()" style="min-width: auto; padding: 10px 15px;">🔍 Scan</button>
+                        </div>
+                        <input type="password" id="wifiPassword" placeholder="WiFi Password">
+                        <small>Enter the password for the selected network</small>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn btn-primary" onclick="connectWifi()">📶 Connect to WiFi</button>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <div class="section-title">🔌 Wired Connection (eth0)</div>
+                    <div class="network-info">
+                        <div class="form-group">
+                            <label>Status</label>
+                            <div class="status-display" id="ethStatus">Loading...</div>
+                        </div>
+                        <div class="form-group">
+                            <label>IP Address</label>
+                            <div class="status-display" id="ethIp">--</div>
+                        </div>
+                        <div class="form-group">
+                            <label>MAC Address</label>
+                            <div class="status-display" id="ethMac">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="margin-top: 20px;">
+                        <label>IP Configuration</label>
+                        <select id="ethDhcp" onchange="toggleEthStatic()">
+                            <option value="dhcp">DHCP (Automatic)</option>
+                            <option value="static">Static IP</option>
+                        </select>
+                    </div>
+                    
+                    <div id="ethStaticConfig" style="display: none;">
+                        <div class="form-group">
+                            <label>IP Address</label>
+                            <input type="text" id="ethStaticIp" placeholder="192.168.1.100">
+                        </div>
+                        <div class="form-group">
+                            <label>Subnet Mask</label>
+                            <input type="text" id="ethSubnet" placeholder="255.255.255.0" value="255.255.255.0">
+                        </div>
+                        <div class="form-group">
+                            <label>Gateway</label>
+                            <input type="text" id="ethGateway" placeholder="192.168.1.1">
+                        </div>
+                        <div class="form-group">
+                            <label>DNS Servers</label>
+                            <input type="text" id="ethDns" placeholder="8.8.8.8, 8.8.4.4">
+                            <small>Comma-separated DNS servers</small>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn btn-primary" onclick="saveEthConfig()">💾 Save Wired Settings</button>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <div class="section-title">📶 Wireless Configuration (wlan0)</div>
+                    <div class="form-group">
+                        <label>IP Configuration</label>
+                        <select id="wlanDhcp" onchange="toggleWlanStatic()">
+                            <option value="dhcp">DHCP (Automatic)</option>
+                            <option value="static">Static IP</option>
+                        </select>
+                    </div>
+                    
+                    <div id="wlanStaticConfig" style="display: none;">
+                        <div class="form-group">
+                            <label>IP Address</label>
+                            <input type="text" id="wlanStaticIp" placeholder="192.168.1.101">
+                        </div>
+                        <div class="form-group">
+                            <label>Subnet Mask</label>
+                            <input type="text" id="wlanSubnet" placeholder="255.255.255.0" value="255.255.255.0">
+                        </div>
+                        <div class="form-group">
+                            <label>Gateway</label>
+                            <input type="text" id="wlanGateway" placeholder="192.168.1.1">
+                        </div>
+                        <div class="form-group">
+                            <label>DNS Servers</label>
+                            <input type="text" id="wlanDns" placeholder="8.8.8.8, 8.8.4.4">
+                            <small>Comma-separated DNS servers</small>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn btn-primary" onclick="saveWlanConfig()">💾 Save Wireless Settings</button>
                     </div>
                 </div>
             </div>
@@ -864,15 +1046,241 @@
             }
         }
         
+        // ==========================================
+        // Network Management Functions
+        // ==========================================
+        
+        // Load network status
+        async function loadNetworkStatus() {
+            try {
+                const response = await fetch(API_BASE + '/api/network/status');
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                
+                // WiFi status
+                if (data.wifi) {
+                    document.getElementById('currentSsid').textContent = data.wifi.ssid || 'Not connected';
+                    document.getElementById('wifiSignal').innerHTML = data.wifi.signal ? 
+                        createSignalBars(data.wifi.signal) + ' ' + data.wifi.signal + '%' : '--';
+                    document.getElementById('wifiIp').textContent = data.wifi.ip || '--';
+                }
+                
+                // Ethernet status
+                if (data.ethernet) {
+                    document.getElementById('ethStatus').textContent = data.ethernet.connected ? 'Connected' : 'Disconnected';
+                    document.getElementById('ethStatus').style.color = data.ethernet.connected ? '#28a745' : '#dc3545';
+                    document.getElementById('ethIp').textContent = data.ethernet.ip || '--';
+                    document.getElementById('ethMac').textContent = data.ethernet.mac || '--';
+                    
+                    // Set DHCP/Static
+                    document.getElementById('ethDhcp').value = data.ethernet.dhcp ? 'dhcp' : 'static';
+                    if (!data.ethernet.dhcp) {
+                        document.getElementById('ethStaticIp').value = data.ethernet.ip || '';
+                        document.getElementById('ethSubnet').value = data.ethernet.netmask || '255.255.255.0';
+                        document.getElementById('ethGateway').value = data.ethernet.gateway || '';
+                        document.getElementById('ethDns').value = data.ethernet.dns ? data.ethernet.dns.join(', ') : '';
+                    }
+                    toggleEthStatic();
+                }
+                
+                // WiFi config
+                if (data.wifi) {
+                    document.getElementById('wlanDhcp').value = data.wifi.dhcp ? 'dhcp' : 'static';
+                    if (!data.wifi.dhcp) {
+                        document.getElementById('wlanStaticIp').value = data.wifi.ip || '';
+                        document.getElementById('wlanSubnet').value = data.wifi.netmask || '255.255.255.0';
+                        document.getElementById('wlanGateway').value = data.wifi.gateway || '';
+                        document.getElementById('wlanDns').value = data.wifi.dns ? data.wifi.dns.join(', ') : '';
+                    }
+                    toggleWlanStatic();
+                }
+            } catch (error) {
+                console.error('Error loading network status:', error);
+            }
+        }
+        
+        // Create signal strength bars
+        function createSignalBars(strength) {
+            const bars = 4;
+            const activeCount = Math.ceil((strength / 100) * bars);
+            let html = '<span class="signal-bars">';
+            for (let i = 1; i <= bars; i++) {
+                html += '<span class="signal-bar' + (i <= activeCount ? ' active' : '') + '"></span>';
+            }
+            html += '</span>';
+            return html;
+        }
+        
+        // Scan for WiFi networks
+        async function scanWifiNetworks() {
+            const select = document.getElementById('wifiNetworkList');
+            select.innerHTML = '<option value="">Scanning...</option>';
+            
+            try {
+                const response = await fetch(API_BASE + '/api/network/wifi/scan');
+                const data = await response.json();
+                
+                select.innerHTML = '<option value="">-- Select Network --</option>';
+                
+                if (data.networks && data.networks.length > 0) {
+                    data.networks.forEach(network => {
+                        const option = document.createElement('option');
+                        option.value = network.ssid;
+                        option.textContent = network.ssid + ' (' + network.signal + '%)';
+                        if (network.connected) {
+                            option.textContent += ' ✓';
+                        }
+                        select.appendChild(option);
+                    });
+                    showAlert('Found ' + data.networks.length + ' WiFi networks', 'success');
+                } else {
+                    showAlert('No WiFi networks found', 'warning');
+                }
+            } catch (error) {
+                showAlert('Error scanning WiFi: ' + error.message, 'error');
+                select.innerHTML = '<option value="">-- Error scanning --</option>';
+            }
+        }
+        
+        // Connect to WiFi network
+        async function connectWifi() {
+            const ssid = document.getElementById('wifiNetworkList').value;
+            const password = document.getElementById('wifiPassword').value;
+            
+            if (!ssid) {
+                showAlert('Please select a WiFi network', 'error');
+                return;
+            }
+            
+            showAlert('Connecting to ' + ssid + '...', 'info');
+            
+            try {
+                const response = await fetch(API_BASE + '/api/network/wifi/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ssid: ssid, password: password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✓ Connected to ' + ssid, 'success');
+                    document.getElementById('wifiPassword').value = '';
+                    setTimeout(loadNetworkStatus, 3000);
+                } else {
+                    showAlert('✗ Failed to connect: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('✗ Error connecting: ' + error.message, 'error');
+            }
+        }
+        
+        // Toggle Ethernet static config visibility
+        function toggleEthStatic() {
+            const dhcp = document.getElementById('ethDhcp').value;
+            document.getElementById('ethStaticConfig').style.display = dhcp === 'static' ? 'block' : 'none';
+        }
+        
+        // Toggle WiFi static config visibility
+        function toggleWlanStatic() {
+            const dhcp = document.getElementById('wlanDhcp').value;
+            document.getElementById('wlanStaticConfig').style.display = dhcp === 'static' ? 'block' : 'none';
+        }
+        
+        // Save Ethernet configuration
+        async function saveEthConfig() {
+            const config = {
+                interface: 'eth0',
+                dhcp: document.getElementById('ethDhcp').value === 'dhcp'
+            };
+            
+            if (!config.dhcp) {
+                config.ip = document.getElementById('ethStaticIp').value;
+                config.netmask = document.getElementById('ethSubnet').value;
+                config.gateway = document.getElementById('ethGateway').value;
+                config.dns = document.getElementById('ethDns').value.split(',').map(s => s.trim()).filter(s => s);
+                
+                if (!config.ip) {
+                    showAlert('Please enter an IP address', 'error');
+                    return;
+                }
+            }
+            
+            showAlert('Saving ethernet configuration...', 'info');
+            
+            try {
+                const response = await fetch(API_BASE + '/api/network/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✓ Ethernet settings saved! Network will restart.', 'success');
+                    setTimeout(loadNetworkStatus, 5000);
+                } else {
+                    showAlert('✗ Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('✗ Error saving config: ' + error.message, 'error');
+            }
+        }
+        
+        // Save WiFi configuration
+        async function saveWlanConfig() {
+            const config = {
+                interface: 'wlan0',
+                dhcp: document.getElementById('wlanDhcp').value === 'dhcp'
+            };
+            
+            if (!config.dhcp) {
+                config.ip = document.getElementById('wlanStaticIp').value;
+                config.netmask = document.getElementById('wlanSubnet').value;
+                config.gateway = document.getElementById('wlanGateway').value;
+                config.dns = document.getElementById('wlanDns').value.split(',').map(s => s.trim()).filter(s => s);
+                
+                if (!config.ip) {
+                    showAlert('Please enter an IP address', 'error');
+                    return;
+                }
+            }
+            
+            showAlert('Saving wireless configuration...', 'info');
+            
+            try {
+                const response = await fetch(API_BASE + '/api/network/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✓ Wireless settings saved! Network will restart.', 'success');
+                    setTimeout(loadNetworkStatus, 5000);
+                } else {
+                    showAlert('✗ Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('✗ Error saving config: ' + error.message, 'error');
+            }
+        }
+        
         // Initialize
         window.addEventListener('load', () => {
             checkStatus();
             loadConfig();
             loadOdooConfig();
+            loadNetworkStatus();
             refreshPrinters();
             
             // Refresh status every 30 seconds
             setInterval(checkStatus, 30000);
+            setInterval(loadNetworkStatus, 60000);
         });
     </script>
 </body>
