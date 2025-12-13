@@ -630,22 +630,23 @@ class PrinterManager:
                 
                 if sumatra_exe:
                     logger.info(f"Using SumatraPDF: {sumatra_exe}")
-                    for _ in range(copies):
-                        result = subprocess.run([
-                            sumatra_exe,
-                            "-print-to", printer_name,
-                            "-silent",
-                            temp_path
-                        ], capture_output=True, timeout=60)
-                        
-                        if result.returncode == 0:
-                            success = True
-                        else:
-                            logger.warning(f"SumatraPDF returned: {result.returncode}")
+                    # Build print settings string with copies
+                    print_settings = f"{copies}x" if copies > 1 else "noscale"
                     
-                    if success:
-                        logger.info(f"Printed via SumatraPDF to {printer_name}")
+                    result = subprocess.run([
+                        sumatra_exe,
+                        "-print-to", printer_name,
+                        "-print-settings", print_settings,
+                        "-silent",
+                        temp_path
+                    ], capture_output=True, timeout=60)
+                    
+                    if result.returncode == 0:
+                        success = True
+                        logger.info(f"Printed {copies} copies via SumatraPDF to {printer_name}")
                         return True
+                    else:
+                        logger.warning(f"SumatraPDF returned: {result.returncode}")
             except Exception as e:
                 logger.debug(f"SumatraPDF method failed: {e}")
             
