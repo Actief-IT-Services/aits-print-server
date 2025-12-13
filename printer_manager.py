@@ -444,9 +444,10 @@ class PrinterManager:
             logger.info(f"Created temp file {temp_file.name} ({len(document_data)} bytes) for printing")
             
             # Prepare print options
-            cups_options = {
-                'copies': str(copies)
-            }
+            # CUPS can accept both 'copies' option or via printFile API
+            cups_options = {}
+            
+            logger.info(f"Printing {copies} copies")
             
             # Add custom options
             if options:
@@ -461,6 +462,10 @@ class PrinterManager:
             
             # Use CUPS library if available, otherwise fall back to lp command
             if self.cups_conn:
+                # Set copies option - CUPS requires string value
+                if copies > 1:
+                    cups_options['copies'] = str(copies)
+                
                 # Submit print job via CUPS library
                 job_id = self.cups_conn.printFile(
                     printer_name,
